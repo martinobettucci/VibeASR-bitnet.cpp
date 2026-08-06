@@ -1,5 +1,5 @@
-// Re-quantise a single tensor of an already-quantised VibeASR LM GGUF, copying
-// everything else through untouched.
+// Re-quantise or drop a single tensor of an already-quantised VibeASR LM GGUF,
+// copying everything else through byte for byte.
 //
 // Why this exists: the released vibeasr-lm-i2_s-embed-q6_k.gguf carries
 // output.weight as F16 -- 151936 x 1536 x 2 B = 467 MB, 47% of the 993 MB file --
@@ -22,7 +22,11 @@
 // missing, so dropping it is numerically the same as re-quantising to Q6_K while
 // keeping only one copy resident.
 //
-// Rows are quantised in parallel across the requested thread count.
+// Note on reading: gguf_init_from_file cannot allocate this file's tensor data,
+// because it sizes the blob with ggml_row_size, which does not know about I2_S's
+// 2-bit packing (only ggml_nbytes does) and so overshoots by ~4x and runs off the
+// end. We therefore load metadata only and read each tensor's bytes ourselves from
+// the recorded offsets, sizing with ggml_nbytes.
 
 #include "ggml.h"
 
@@ -79,48 +83,67 @@ int main(int argc, char ** argv) {
     }
     if (nthreads < 1) nthreads = 1;
 
-    struct ggml_context * ctx_data = NULL;
-    struct gguf_init_params gp = { /*.no_alloc =*/ false, /*.ctx =*/ &ctx_data };
+    struct ggml_context * ctx_meta = NULL;
+    struct gguf_init_params gp = { /*.no_alloc =*/ true, /*.ctx =*/ &ctx_meta };
     struct gguf_context * gin = gguf_init_from_file(fin.c_str(), gp);
     if (!gin) { fprintf(stderr, "failed to open %s\n", fin.c_str()); return 1; }
 
-    struct gguf_context * gout = gguf_init_empty();
-    gguf_set_kv(gout, gin);  // architecture, tokenizer, hyperparameters -- all of it
+    const int n_tensors = gguf_get_n_tensors(gin);
+    const size_t data_off = gguf_get_data_offset(gin);
 
-    struct ggml_tensor * src = ggml_get_tensor(ctx_data, target_name.c_str());
+    FILE * f = fopen(fin.c_str(), "rb");
+    if (!f) { fprintf(stderr, "failed to reopen %s\n", fin.c_str()); return 1; }
+
+    // Read every tensor's payload into its own buffer and point the metadata tensor
+    // at it, so gguf_add_tensor can copy it straight through.
+    std::vector<std::vector<char>> blobs(n_tensors);
+    std::vector<struct ggml_tensor *> tensors(n_tensors);
+    size_t bytes_in = 0;
+    for (int i = 0; i < n_tensors; i++) {
+        const char * name = gguf_get_tensor_name(gin, i);
+        struct ggml_tensor * t = ggml_get_tensor(ctx_meta, name);
+        const size_t nb = ggml_nbytes(t);
+        blobs[i].resize(nb);
+        if (fseek(f, (long) (data_off + gguf_get_tensor_offset(gin, i)), SEEK_SET) != 0 ||
+            fread(blobs[i].data(), 1, nb, f) != nb) {
+            fprintf(stderr, "failed reading tensor '%s' (%zu bytes)\n", name, nb);
+            return 1;
+        }
+        t->data = blobs[i].data();
+        tensors[i] = t;
+        bytes_in += nb;
+    }
+    fclose(f);
+
+    struct ggml_tensor * src = ggml_get_tensor(ctx_meta, target_name.c_str());
     if (!src) {
         fprintf(stderr, "tensor '%s' not found in %s\n", target_name.c_str(), fin.c_str());
         return 1;
     }
-    if (!ggml_is_contiguous(src)) {
-        fprintf(stderr, "tensor '%s' is not contiguous\n", target_name.c_str());
-        return 1;
-    }
+
+    struct gguf_context * gout = gguf_init_empty();
+    gguf_set_kv(gout, gin);  // architecture, tokenizer, hyperparameters -- all of it
 
     const int64_t n_per_row = src->ne[0];
     const int64_t nrows     = ggml_nrows(src);
 
+    // --- drop -------------------------------------------------------------
     if (drop) {
-        size_t bytes_in = 0, bytes_out = 0;
-        for (int i = 0; i < gguf_get_n_tensors(gin); i++) {
-            const char * name = gguf_get_tensor_name(gin, i);
-            struct ggml_tensor * t = ggml_get_tensor(ctx_data, name);
-            bytes_in += ggml_nbytes(t);
-            if (target_name == name) continue;
-            gguf_add_tensor(gout, t);
-            bytes_out += ggml_nbytes(t);
+        size_t bytes_out = 0;
+        for (int i = 0; i < n_tensors; i++) {
+            if (target_name == gguf_get_tensor_name(gin, i)) continue;
+            gguf_add_tensor(gout, tensors[i]);
+            bytes_out += ggml_nbytes(tensors[i]);
         }
         gguf_write_to_file(gout, fout.c_str(), /*only_meta =*/ false);
         printf("dropped %-18s %8.1f MB\n", target_name.c_str(), ggml_nbytes(src) / 1e6);
-        printf("model   %8.1f MB -> %8.1f MB  (%.1f%% smaller)\n",
+        printf("tensors %8.1f MB -> %8.1f MB  (%.1f%% smaller)\n",
                bytes_in / 1e6, bytes_out / 1e6, 100.0 * (1.0 - (double) bytes_out / bytes_in));
         printf("wrote %s\n", fout.c_str());
-        ggml_free(ctx_data);
-        gguf_free(gin);
-        gguf_free(gout);
         return 0;
     }
 
+    // --- re-quantise ------------------------------------------------------
     if (n_per_row % ggml_blck_size(target_type) != 0) {
         fprintf(stderr, "row length %lld is not a multiple of the %s block size %d\n",
                 (long long) n_per_row, ggml_type_name(target_type), ggml_blck_size(target_type));
@@ -144,13 +167,14 @@ int main(int argc, char ** argv) {
         const size_t row_bytes = ggml_row_size(src->type, n_per_row);
         for (int64_t r = 0; r < nrows; r++) {
             tr->to_float((const char *) src->data + r * row_bytes,
-                        f32.data() + r * n_per_row, (int) n_per_row);
+                         f32.data() + r * n_per_row, (int) n_per_row);
         }
     }
 
     // Quantise row blocks in parallel. ggml_quantize_chunk writes each block of rows
     // to its own slice of the destination, so the threads never overlap.
-    std::vector<char> qdata(ggml_row_size(target_type, n_per_row) * nrows);
+    const size_t qrow = ggml_row_size(target_type, n_per_row);
+    std::vector<char> qdata(qrow * nrows);
     const int64_t chunk = (nrows + nthreads - 1) / nthreads;
     std::vector<std::thread> pool;
     for (int t = 0; t < nthreads; t++) {
@@ -159,44 +183,32 @@ int main(int argc, char ** argv) {
         if (r0 >= r1) break;
         pool.emplace_back([&, r0, r1]() {
             ggml_quantize_chunk(target_type, f32.data() + r0 * n_per_row,
-                                qdata.data() + ggml_row_size(target_type, n_per_row) * r0,
-                                r0, r1 - r0, n_per_row, /*imatrix =*/ NULL);
+                                qdata.data() + qrow * r0, r0, r1 - r0, n_per_row,
+                                /*imatrix =*/ NULL);
         });
     }
     for (auto & th : pool) th.join();
 
-    // Rebuild the tensor list in the original order, swapping in the new tensor.
-    struct ggml_init_params mp = { /*.mem_size =*/ ggml_tensor_overhead() * (gguf_get_n_tensors(gin) + 1),
+    struct ggml_init_params mp = { /*.mem_size =*/ ggml_tensor_overhead() * 2,
                                    /*.mem_buffer =*/ NULL, /*.no_alloc =*/ true };
-    struct ggml_context * ctx_meta = ggml_init(mp);
-    struct ggml_tensor * newt = ggml_new_tensor_2d(ctx_meta, target_type, n_per_row, nrows);
+    struct ggml_context * ctx_new = ggml_init(mp);
+    struct ggml_tensor * newt = ggml_new_tensor_2d(ctx_new, target_type, n_per_row, nrows);
     ggml_set_name(newt, target_name.c_str());
+    newt->data = qdata.data();
 
-    size_t bytes_in = 0, bytes_out = 0;
-    for (int i = 0; i < gguf_get_n_tensors(gin); i++) {
-        const char * name = gguf_get_tensor_name(gin, i);
-        struct ggml_tensor * t = ggml_get_tensor(ctx_data, name);
-        bytes_in += ggml_nbytes(t);
-        if (target_name == name) {
-            gguf_add_tensor(gout, newt);
-            gguf_set_tensor_data(gout, name, qdata.data(), qdata.size());
-            bytes_out += qdata.size();
-        } else {
-            gguf_add_tensor(gout, t);
-            bytes_out += ggml_nbytes(t);
-        }
+    size_t bytes_out = 0;
+    for (int i = 0; i < n_tensors; i++) {
+        const bool is_target = target_name == gguf_get_tensor_name(gin, i);
+        struct ggml_tensor * t = is_target ? newt : tensors[i];
+        gguf_add_tensor(gout, t);
+        bytes_out += ggml_nbytes(t);
     }
 
     gguf_write_to_file(gout, fout.c_str(), /*only_meta =*/ false);
 
     printf("tensor  %8.1f MB -> %8.1f MB\n", ggml_nbytes(src) / 1e6, qdata.size() / 1e6);
-    printf("model   %8.1f MB -> %8.1f MB  (%.1f%% smaller)\n",
+    printf("tensors %8.1f MB -> %8.1f MB  (%.1f%% smaller)\n",
            bytes_in / 1e6, bytes_out / 1e6, 100.0 * (1.0 - (double) bytes_out / bytes_in));
     printf("wrote %s\n", fout.c_str());
-
-    ggml_free(ctx_meta);
-    ggml_free(ctx_data);
-    gguf_free(gin);
-    gguf_free(gout);
     return 0;
 }
