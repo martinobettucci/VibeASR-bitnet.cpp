@@ -9,6 +9,7 @@
 #include "vae-config.h"
 #include "vibeasr-cpu.h"
 #include "vibeasr-kernel-stats.h"
+#include <cstdlib>
 
 #if defined(VAE_ACT_PARALLEL)
 #define VAE_ACT_PARALLEL_SELECTED 1
@@ -705,6 +706,138 @@ void ggml_vec_dot_i8_i8_Nx1(int n, int32_t * s, size_t bs, const void * vx, size
         s[col * bs] = sumi;
     }
 #endif
+}
+
+// ---------------------------------------------------------------------------
+// Register-tiled INT8 GEMM. See the header for why this exists and how it avoids
+// the per-pair sign fold.
+// ---------------------------------------------------------------------------
+
+#define I8_TILE_M 4   // activation rows per tile
+#define I8_TILE_N 4   // weight columns per tile
+                      // 4x4 int32 accumulators = 16 zmm, leaving room for 4+4 operands
+
+#if defined(VIBEASR_HAS_AVX512_PATH)
+
+VIBEASR_TGT_VNNI static void gemm_i8_tile_vnni(
+        int nbytes, int32_t * s, size_t bs,
+        const int8_t * vx, const int8_t * vy, int nr, int nc, int n) {
+    const __m512i ones  = _mm512_set1_epi8(1);
+    const __m512i flip  = _mm512_set1_epi8((char) 0x80);  // +128 on an int8, i.e. to unsigned
+
+    const int nr_t = nr - nr % I8_TILE_M;
+    const int nc_t = nc - nc % I8_TILE_N;
+
+    for (int r0 = 0; r0 < nr_t; r0 += I8_TILE_M) {
+        // Row sums, once per row block rather than once per tile: the -128*sum(y)
+        // correction is the same for every column this row meets.
+        int32_t rowsum[I8_TILE_M];
+        for (int r = 0; r < I8_TILE_M; r++) {
+            __m512i acc = _mm512_setzero_si512();
+            const int8_t * py = vy + (size_t)(r0 + r) * n;
+            for (int i = 0; i < nbytes; i += 64) {
+                acc = _mm512_dpbusd_epi32(acc, ones, _mm512_loadu_si512((const void *)(py + i)));
+            }
+            rowsum[r] = _mm512_reduce_add_epi32(acc);
+        }
+
+        for (int c0 = 0; c0 < nc_t; c0 += I8_TILE_N) {
+            __m512i acc[I8_TILE_M][I8_TILE_N];
+            for (int r = 0; r < I8_TILE_M; r++)
+                for (int c = 0; c < I8_TILE_N; c++)
+                    acc[r][c] = _mm512_setzero_si512();
+
+            for (int i = 0; i < nbytes; i += 64) {
+                __m512i xu[I8_TILE_N];
+                for (int c = 0; c < I8_TILE_N; c++) {
+                    // XOR 0x80 turns int8 x into the unsigned byte x+128
+                    xu[c] = _mm512_xor_si512(
+                        _mm512_loadu_si512((const void *)(vx + (size_t)(c0 + c) * n + i)), flip);
+                }
+                for (int r = 0; r < I8_TILE_M; r++) {
+                    const __m512i yv =
+                        _mm512_loadu_si512((const void *)(vy + (size_t)(r0 + r) * n + i));
+                    for (int c = 0; c < I8_TILE_N; c++) {
+                        acc[r][c] = _mm512_dpbusd_epi32(acc[r][c], xu[c], yv);
+                    }
+                }
+            }
+
+            for (int r = 0; r < I8_TILE_M; r++) {
+                for (int c = 0; c < I8_TILE_N; c++) {
+                    // sum((x+128)*y) - 128*sum(y) == sum(x*y)
+                    s[(size_t)(r0 + r) * bs + c0 + c] =
+                        _mm512_reduce_add_epi32(acc[r][c]) - 128 * rowsum[r];
+                }
+            }
+        }
+
+        // Ragged columns
+        for (int c = nc_t; c < nc; c++) {
+            for (int r = 0; r < I8_TILE_M; r++) {
+                ggml_vec_dot_i8_i8(n, s + (size_t)(r0 + r) * bs + c, 0,
+                                   vx + (size_t) c * n, 0, vy + (size_t)(r0 + r) * n, 0, 1);
+            }
+        }
+    }
+
+    // Ragged rows
+    for (int r = nr_t; r < nr; r++) {
+        for (int c = 0; c < nc; c++) {
+            ggml_vec_dot_i8_i8(n, s + (size_t) r * bs + c, 0,
+                               vx + (size_t) c * n, 0, vy + (size_t) r * n, 0, 1);
+        }
+    }
+}
+
+#endif  // VIBEASR_HAS_AVX512_PATH
+
+void ggml_gemm_i8_i8_tiled(int n, int32_t * s, size_t bs, const void * vx, const void * vy,
+                           int nr, int nc) {
+    VIBEASR_PROBE(VIBEASR_K_I8_GEMM, (uint64_t) n * (uint64_t) nr * (uint64_t) nc);
+
+#if defined(VIBEASR_HAS_AVX512_PATH)
+    // VIBEASR_GEMM_TILE=0 takes the fallback while leaving the vec_dot kernels on
+    // their VNNI path, so the tile can be A/B'd against exactly what it replaces.
+    // Forcing VIBEASR_ISA down would also demote vec_dot and overstate the tile.
+    static const int tile_on = []() {
+        const char * e = getenv("VIBEASR_GEMM_TILE");
+        return !(e && !strcmp(e, "0"));
+    }();
+
+    // The vec_dot kernels consume whole QK_I8_S blocks and ignore any tail; a tile
+    // that disagreed would silently change results, so match them exactly. n < one
+    // block has no whole blocks at all and goes to the fallback.
+    const int nbytes = (n / QK_I8_S) * QK_I8_S;
+    if (tile_on && vibeasr_isa() >= VIBEASR_ISA_VNNI && nbytes >= 64 && nbytes % 64 == 0) {
+        gemm_i8_tile_vnni(nbytes, s, bs, (const int8_t *) vx, (const int8_t *) vy, nr, nc, n);
+        return;
+    }
+#endif
+
+    // Fallback: the original blocking, one weight column against a block of rows.
+    const int64_t row_block = VAE_ROW_BLOCK_SIZE;
+    const int64_t col_block = VAE_COL_BLOCK_SIZE;
+    for (int64_t c0 = 0; c0 < nc; c0 += col_block) {
+        const int64_t cur_c = (c0 + col_block <= nc) ? col_block : (nc - c0);
+        for (int64_t r0 = 0; r0 < nr; r0 += row_block) {
+            const int64_t cur_r = (r0 + row_block <= nr) ? row_block : (nr - r0);
+            const int8_t * vy_r = (const int8_t *) vy + r0 * n;
+            for (int64_t c = 0; c < cur_c; ++c) {
+                const int64_t col = c0 + c;
+                int32_t * s_col = s + col;
+                const int8_t * vx_col = (const int8_t *) vx + col * n;
+                if (cur_r % VAE_PARALLEL_SIZE == 0) {
+                    ggml_vec_dot_i8_i8(n, s_col + r0 * bs, bs, vx_col, n, vy_r, n, (int) cur_r);
+                } else {
+                    for (int64_t r = 0; r < cur_r; ++r) {
+                        ggml_vec_dot_i8_i8(n, s_col + (r0 + r) * bs, 0,
+                                           vx_col, 0, vy_r + r * n, 0, 1);
+                    }
+                }
+            }
+        }
+    }
 }
 
 void ggml_vec_dot_i8_i8(int n, int32_t * s, size_t bs, const void * vx, size_t bx, const void * vy, size_t by, int nrc) {

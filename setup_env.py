@@ -77,6 +77,40 @@ def setup_gguf():
         sys.exit(1)
 
 
+def apply_patches():
+    """Apply patches/*.patch to the llama.cpp submodule.
+
+    The submodule is pinned to an upstream commit, so changes inside it cannot be
+    committed to this repository -- they live as patch files instead. Each is applied
+    only if it is not already in the tree, so re-running setup is safe.
+    """
+    patch_dir = Path("patches")
+    submodule = Path("3rdparty/llama.cpp")
+    if not patch_dir.is_dir():
+        return
+    if not submodule.is_dir():
+        logger.warning("llama.cpp submodule missing; skipping patches")
+        return
+
+    for patch in sorted(patch_dir.glob("*.patch")):
+        # --reverse --check succeeds when the patch is already applied.
+        already = subprocess.run(
+            ["git", "apply", "--reverse", "--check", str(Path("..") / ".." / patch)],
+            cwd=submodule, capture_output=True,
+        ).returncode == 0
+        if already:
+            logger.info(f"Patch already applied: {patch.name}")
+            continue
+        logger.info(f"Applying patch: {patch.name}")
+        result = subprocess.run(
+            ["git", "apply", str(Path("..") / ".." / patch)],
+            cwd=submodule, capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            logger.error(f"Failed to apply {patch.name}: {result.stderr.strip()}")
+            sys.exit(1)
+
+
 def compile_project():
     """Build the project with CMake."""
     os_name, arch = system_info()
@@ -162,6 +196,7 @@ def main():
 
     if not args.skip_build:
         setup_gguf()
+        apply_patches()
         compile_project()
 
     if not args.skip_download:

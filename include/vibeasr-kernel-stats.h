@@ -24,6 +24,7 @@ enum vibeasr_kernel_id {
     VIBEASR_K_I8_Nx1,
     VIBEASR_K_I8_SMALL,
     VIBEASR_K_I8_BATCH_N8,
+    VIBEASR_K_I8_GEMM,
     VIBEASR_K_COUNT
 };
 

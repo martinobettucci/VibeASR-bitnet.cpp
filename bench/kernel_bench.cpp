@@ -177,6 +177,33 @@ static void check_i2(int n, int nrc, int amp, Tally & t, bool verbose) {
     }
 }
 
+// The tiled GEMM computes s[r*bs + c] = dot(y_row r, x_col c) for a whole nr x nc
+// block, so it needs its own check: it must agree with the scalar reference for every
+// cell, including the ragged edges that fall back to vec_dot.
+static void check_gemm(int n, int nr, int nc, int amp, Tally & t, bool verbose) {
+    const int nbytes = (n / 32) * 32;
+    std::vector<int8_t> x((size_t) n * nc), y((size_t) n * nr);
+    fill_i8(x.data(), x.size(), amp);
+    fill_i8(y.data(), y.size(), amp);
+
+    const size_t bs = nc;
+    std::vector<int32_t> got((size_t) nr * nc, 0);
+    ggml_gemm_i8_i8_tiled(n, got.data(), bs, x.data(), y.data(), nr, nc);
+
+    for (int r = 0; r < nr; r++) {
+        for (int c = 0; c < nc; c++) {
+            const int32_t want = ref_i8(y.data() + (size_t) r * n, x.data() + (size_t) c * n, nbytes);
+            const bool ok = got[(size_t) r * bs + c] == want;
+            t.note(ok);
+            if (!ok && verbose) {
+                printf("    gemm n=%d nr=%d nc=%d [%d,%d]: got %d want %d\n",
+                       n, nr, nc, r, c, got[(size_t) r * bs + c], want);
+                verbose = false;
+            }
+        }
+    }
+}
+
 // --- throughput ------------------------------------------------------------
 
 int main(int argc, char ** argv) {
@@ -202,6 +229,9 @@ int main(int argc, char ** argv) {
         printf("%s\n", reg.label);
         for (auto & sh : i8_shapes) { rng_seed(0x243f6a88); check_i8(sh[0], sh[1], reg.amp, t, true); }
         for (auto & sh : i2_shapes) { rng_seed(0x85a308d3); check_i2(sh[0], sh[1], reg.amp, t, true); }
+        // Tiled GEMM: sizes on and off the 4x4 tile so the ragged paths are covered.
+        const int gemm_shapes[][3] = {{64,8,8},{128,4,4},{512,17,13},{2048,32,16},{8960,5,7},{32,9,3}};
+        for (auto & g : gemm_shapes) { rng_seed(0xdeadbeef); check_gemm(g[0], g[1], g[2], reg.amp, t, true); }
         printf("  %d/%d dot products match the scalar reference%s\n\n",
                t.checked - t.wrong, t.checked, t.wrong ? "" : "  [ok]");
         if (t.wrong && reg.fatal) rc = 1;
@@ -260,7 +290,27 @@ int main(int argc, char ** argv) {
         }
     }
 
-    printf("throughput, single thread (%s)\n", vibeasr_isa_name(vibeasr_isa()));
+    // Tiled GEMM vs the vec_dot blocking it replaces. VIBEASR_ISA=avx512 selects the
+    // fallback inside the same entry point, so this is a like-for-like A/B.
+    printf("\ni8_s GEMM, single thread (%s)\n", vibeasr_isa_name(vibeasr_isa()));
+    printf("  %-30s %10s\n", "shape", "GMAC/s");
+    const int gshapes[][3] = {{512,32,32},{2048,32,32},{2048,128,64},{8960,64,32}};
+    for (auto & g : gshapes) {
+        const int n = g[0], nr = g[1], nc = g[2];
+        const int iters = (int)(2e9 / ((double) n * nr * nc)) + 1;
+        std::vector<int8_t> x((size_t) n * nc), y((size_t) n * nr);
+        rng_seed(0xdeadbeef); fill_i8(x.data(), x.size(), 127); fill_i8(y.data(), y.size(), 127);
+        std::vector<int32_t> out((size_t) nr * nc);
+        ggml_gemm_i8_i8_tiled(n, out.data(), nc, x.data(), y.data(), nr, nc);
+        const double t0 = now_s();
+        for (int it = 0; it < iters; it++)
+            ggml_gemm_i8_i8_tiled(n, out.data(), nc, x.data(), y.data(), nr, nc);
+        const double dt = now_s() - t0;
+        char buf[64]; snprintf(buf, sizeof buf, "n=%-5d nr=%-4d nc=%-4d", n, nr, nc);
+        printf("  %-30s %10.1f\n", buf, (double) n * nr * nc * iters / dt / 1e9);
+    }
+
+    printf("\nthroughput, single thread (%s)\n", vibeasr_isa_name(vibeasr_isa()));
     printf("  %-30s %10s\n", "kernel / shape", "GMAC/s");
     for (auto & r : out) printf("  %-30s %10.1f\n", r.name.c_str(), r.gmacs);
     return rc;

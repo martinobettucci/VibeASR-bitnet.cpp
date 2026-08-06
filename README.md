@@ -244,6 +244,35 @@ value on the 8.38 s clip, total compute:
 counts are byte-identical between block 4 and 32. Re-tune with
 `bench/row_block_sweep.sh --macro <NAME>`.
 
+#### Register-tiled INT8 GEMM
+
+Blocking only amortises the call; the loop still re-read one operand for every step
+of the other. `ggml_gemm_i8_i8_tiled` holds a 4×4 tile of int32 accumulators in
+registers so both operands are loaded once per tile. It also drops the sign fold the
+`vec_dot` kernels need — `vpdpbusd` wants one unsigned operand, and folding x's sign
+onto y costs work *per operand pair*, which never amortises. Instead the weights get
++128 (a sign-bit flip, making them unsigned) with a `-128·Σy` correction per row,
+where the row sums are computed once per row block.
+
+Single thread, tile vs the blocking it replaces, both on VNNI
+(`VIBEASR_GEMM_TILE=0` selects the old path without demoting `vec_dot`):
+
+| shape | tiled | vec_dot blocking | |
+|:--|--:|--:|--:|
+| n=512, 32×32 | 105.7 | 67.3 | 1.57× |
+| n=2048, 32×32 | 99.7 | 44.5 | 2.24× |
+| n=2048, 128×64 | 106.7 | 44.5 | 2.40× |
+| n=8960, 64×32 | 89.9 | 44.5 | 2.02× |
+
+End to end, 7 runs each on the 8.38 s clip: **7510 → 6774 ms median (1.11×)**, ranges
+7361–7721 and 6524–6931, non-overlapping. Output is byte-identical (3 clips hashed),
+and `kernel_bench` checks the tile against the scalar reference at 1655 points
+including the ragged edges where it falls back to `vec_dot`.
+
+This one needs a patch to the pinned submodule, since `ggml_gemm_i8_i8` lives there.
+The kernel itself is in `src/`; `patches/0001-ggml-tiled-i8-gemm.patch` only swaps the
+call site, and `setup_env.py` applies it (idempotently) before building.
+
 > **A correction.** Earlier revisions of this section claimed 2.08× end to end, 1.55×
 > on the VAE and 2.95× on prefill. Those came from single-run sweeps, and this VM has
 > roughly 2× transient variance — the slow-configuration rows happened to land in slow

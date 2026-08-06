@@ -204,6 +204,7 @@ static const char * vibeasr_kernel_name(int id) {
         case VIBEASR_K_I8_Nx1:      return "i8_s  Nx1";
         case VIBEASR_K_I8_SMALL:    return "i8_s  small-n";
         case VIBEASR_K_I8_BATCH_N8: return "i8_s  dwconv n8";
+        case VIBEASR_K_I8_GEMM:     return "i8_s  gemm (tiled)";
         default:                    return "?";
     }
 }

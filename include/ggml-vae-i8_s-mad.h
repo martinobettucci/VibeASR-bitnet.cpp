@@ -12,6 +12,23 @@ extern "C" {
 // INT8 × INT8 vec_dot implementation (output is int32 to avoid overflow)
 void ggml_vec_dot_i8_i8(int n, int32_t * s, size_t bs, const void * vx, size_t bx, const void * vy, size_t by, int nrc);
 
+// Register-tiled INT8 GEMM:  s[r*bs + c] = dot(vy + r*n, vx + c*n)
+//
+// The vec_dot-per-(row-block, column) loop in ggml_gemm_i8_i8 re-reads one operand
+// for every step of the other. This holds a 4x4 tile of int32 accumulators in
+// registers so both operands are loaded once per tile, roughly doubling the ratio of
+// multiply-accumulates to loads.
+//
+// It also drops the sign fold the vec_dot kernels need. vpdpbusd wants one unsigned
+// operand, so those kernels compute |x| and push x's sign onto y -- per operand pair,
+// which does not amortise across a tile. Instead this adds 128 to the weights (a
+// sign-bit flip, making them unsigned) and corrects with -128*sum(y) per row, where
+// the row sums are computed once per row block.
+//
+// Falls back to the existing vec_dot loop without AVX512-VNNI, and for the ragged
+// edges when nr or nc is not a multiple of the tile.
+void ggml_gemm_i8_i8_tiled(int n, int32_t * s, size_t bs, const void * vx, const void * vy, int nr, int nc);
+
 // Optimized INT8 × INT8 vec_dot for n=4 (process 8 columns simultaneously)
 void ggml_vec_dot_i8_i8_n4_col8(
     int32_t * s, size_t bs,
