@@ -1,0 +1,208 @@
+diff --git a/ggml/src/ggml-aarch64.c b/ggml/src/ggml-aarch64.c
+index 99f43c6..f03d62d 100644
+--- a/ggml/src/ggml-aarch64.c
++++ b/ggml/src/ggml-aarch64.c
+@@ -1223,50 +1223,11 @@ void ggml_gemm_i8_i8(int n, int32_t * GGML_RESTRICT s, size_t bs, const void * G
+     }
+ #endif
+ 
+-#if defined(VAE_ACT_PARALLEL)
+-    const int64_t row_block = VAE_ROW_BLOCK_SIZE;
+-    const int64_t col_block = VAE_COL_BLOCK_SIZE;
+-
+-    for (int64_t c0 = 0; c0 < nc; c0 += col_block) {
+-        int64_t cur_c = (c0 + col_block <= nc) ? col_block : (nc - c0);
+-        for (int64_t r0 = 0; r0 < nr; r0 += row_block) {
+-            int64_t cur_r = (r0 + row_block <= nr) ? row_block : (nr - r0);
+-            const void * vy_r = (const int8_t *)vy + r0 * n;
+-            for (int64_t c = 0; c < cur_c; ++c) {
+-                const int64_t col = c0 + c;
+-                int32_t * s_col = s + col;
+-                const void * vx_col = (const int8_t *)vx + col * n;
+-                if (cur_r % VAE_PARALLEL_SIZE == 0) {
+-                    ggml_vec_dot_i8_i8(n, s_col + r0 * bs, bs, vx_col, n, vy_r, n, cur_r);
+-                } else {
+-                    // nrc=1 per call avoids 1x1 path misinterpreting vx as multi-row
+-                    for (int64_t r = 0; r < cur_r; ++r) {
+-                        const int8_t * vy_row = (const int8_t *)vy_r + r * n;
+-                        ggml_vec_dot_i8_i8(n, s_col + (r0 + r) * bs, 0,
+-                            vx_col, 0, vy_row, 0, 1);
+-                    }
+-                }
+-            }
+-        }
+-    }
+-#else
+-    const int64_t row_block = VAE_ROW_BLOCK_SIZE;
+-    const int64_t col_block = VAE_COL_BLOCK_SIZE;
+-
+-    for (int64_t r0 = 0; r0 < nr; r0 += row_block) {
+-        int64_t cur_r = (r0 + row_block <= nr) ? row_block : (nr - r0);
+-        for (int64_t c0 = 0; c0 < nc; c0 += col_block) {
+-            int64_t cur_c = (c0 + col_block <= nc) ? col_block : (nc - c0);
+-            const void * vx_c = (const int8_t *)vx + c0 * n;
+-            for (int64_t r = 0; r < cur_r; ++r) {
+-                const int64_t row = r0 + r;
+-                int32_t * s_row = s + row * bs;
+-                const void * vy_row = (const int8_t *)vy + row * n;
+-                ggml_vec_dot_i8_i8(n, s_row + c0, bs, vx_c, n, vy_row, n, cur_c);
+-            }
+-        }
+-    }
+-#endif
++    // Register-tiled INT8 GEMM (src/ggml-vae-i8_s-mad.cpp). Replaces the
++    // vec_dot-per-(row-block, column) loop that used to live here, which
++    // re-read one operand for every step of the other. Falls back to that
++    // loop internally without AVX512-VNNI, so behaviour is unchanged there.
++    ggml_gemm_i8_i8_tiled(n, s, bs, vx, vy, nr, nc);
+ }
+ 
+ void ggml_gemm_q4_0_4x4_q8_0(int n, float * restrict s, size_t bs, const void * restrict vx, const void * restrict vy, int nr, int nc) {
+diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c
+index 23303be..454c7f6 100644
+--- a/ggml/src/ggml.c
++++ b/ggml/src/ggml.c
+@@ -19094,12 +19094,11 @@ static void ggml_compute_forward_mul_mat_add(
+             // acc_buf layout: [C, n_cols] (channel-major)
+             // dst layout: ne[0]=1, ne[1]=N, ne[2]=C => physical [C, N] (channel-major)
+             for (int64_t ch = 0; ch < C; ch++) {
+-                for (int64_t c = 0; c < n_cols; c++) {
+-                    float val = (float)acc_buf[ch * n_cols + c] * combined_scale + bias_data[ch];
+-                    float_buf[ch * N_cols + (col0 + c)] = val;
+-                    float av = val < 0.0f ? -val : val;
+-                    if (av > local_absmax) local_absmax = av;
+-                }
++                // vectorised epilogue (src/ggml-vae-i8_s-mad.cpp)
++                const float amax = vibeasr_i8s_dequant_absmax(
++                    acc_buf + ch * n_cols, n_cols, combined_scale, NULL, bias_data[ch],
++                    float_buf + ch * N_cols + col0);
++                if (amax > local_absmax) local_absmax = amax;
+             }
+ 
+         }
+@@ -19127,11 +19126,10 @@ static void ggml_compute_forward_mul_mat_add(
+ 
+         if (col0 < col1) {
+             for (int64_t ch = 0; ch < C; ch++) {
+-                for (int64_t c = col0; c < col1; c++) {
+-                    float v = float_buf[ch * N_cols + c] * inv_scale;
+-                    v = v < -127.0f ? -127.0f : (v > 127.0f ? 127.0f : v);
+-                    ((int8_t *)dst->data)[ch * N_cols + c] = (int8_t)roundf(v);
+-                }
++                // vectorised epilogue (src/ggml-vae-i8_s-mad.cpp)
++                vibeasr_i8s_quant_i8(float_buf + ch * N_cols + col0,
++                                     (int8_t *)dst->data + ch * N_cols + col0,
++                                     col1 - col0, inv_scale, /*relu=*/0);
+             }
+         }
+ 
+@@ -19186,13 +19184,11 @@ static void ggml_compute_forward_mul_mat_add(
+ 
+             // Convert int32 -> float with combined_scale + bias, store in float_buf
+             for (int64_t c = 0; c < n_cols; c++) {
+-                int32_t * col_acc = acc_buf + c * ne01;
+-                for (int64_t oc = 0; oc < ne01; oc++) {
+-                    float val = (float)col_acc[oc] * combined_scale + bias_data[oc];
+-                    float_buf[(col0 + c) * ne01 + oc] = val;
+-                    float av = val < 0.0f ? -val : val;
+-                    if (av > local_absmax) local_absmax = av;
+-                }
++                // vectorised epilogue (src/ggml-vae-i8_s-mad.cpp)
++                const float amax = vibeasr_i8s_dequant_absmax(
++                    acc_buf + c * ne01, ne01, combined_scale, bias_data, 0.0f,
++                    float_buf + (col0 + c) * ne01);
++                if (amax > local_absmax) local_absmax = amax;
+             }
+ 
+         }
+@@ -19219,13 +19215,10 @@ static void ggml_compute_forward_mul_mat_add(
+         const float inv_scale = (global_max != 0.0f) ? 127.0f / global_max : 0.0f;
+ 
+         if (col0 < col1) {
+-            for (int64_t c = col0; c < col1; c++) {
+-                for (int64_t oc = 0; oc < ne01; oc++) {
+-                    float v = float_buf[c * ne01 + oc] * inv_scale;
+-                    v = v < -127.0f ? -127.0f : (v > 127.0f ? 127.0f : v);
+-                    ((int8_t *)dst->data)[c * ne01 + oc] = (int8_t)roundf(v);
+-                }
+-            }
++            // vectorised epilogue (src/ggml-vae-i8_s-mad.cpp)
++            vibeasr_i8s_quant_i8(float_buf + col0 * ne01,
++                                 (int8_t *)dst->data + col0 * ne01,
++                                 (col1 - col0) * ne01, inv_scale, /*relu=*/0);
+         }
+ 
+         // Thread 0 stores the per-tensor output scale
+@@ -19296,12 +19289,11 @@ static void ggml_compute_forward_mul_mat_add_relu(
+             }
+ 
+             for (int64_t ch = 0; ch < C; ch++) {
+-                for (int64_t c = 0; c < n_cols; c++) {
+-                    float val = (float)acc_buf[ch * n_cols + c] * combined_scale + bias_data[ch];
+-                    float_buf[ch * N_cols + (col0 + c)] = val;
+-                    float av = val < 0.0f ? -val : val;
+-                    if (av > local_absmax) local_absmax = av;
+-                }
++                // vectorised epilogue (src/ggml-vae-i8_s-mad.cpp)
++                const float amax = vibeasr_i8s_dequant_absmax(
++                    acc_buf + ch * n_cols, n_cols, combined_scale, NULL, bias_data[ch],
++                    float_buf + ch * N_cols + col0);
++                if (amax > local_absmax) local_absmax = amax;
+             }
+         }
+ 
+@@ -19324,12 +19316,10 @@ static void ggml_compute_forward_mul_mat_add_relu(
+ 
+         if (col0 < col1) {
+             for (int64_t ch = 0; ch < C; ch++) {
+-                for (int64_t c = col0; c < col1; c++) {
+-                    float v = float_buf[ch * N_cols + c] * inv_scale;
+-                    v = v < -127.0f ? -127.0f : (v > 127.0f ? 127.0f : v);
+-                    int8_t q = (int8_t)roundf(v);
+-                    ((int8_t *)dst->data)[ch * N_cols + c] = q < 0 ? 0 : q;
+-                }
++                // vectorised epilogue (src/ggml-vae-i8_s-mad.cpp)
++                vibeasr_i8s_quant_i8(float_buf + ch * N_cols + col0,
++                                     (int8_t *)dst->data + ch * N_cols + col0,
++                                     col1 - col0, inv_scale, /*relu=*/1);
+             }
+         }
+ 
+@@ -19372,13 +19362,11 @@ static void ggml_compute_forward_mul_mat_add_relu(
+             }
+ 
+             for (int64_t c = 0; c < n_cols; c++) {
+-                int32_t * col_acc = acc_buf + c * ne01;
+-                for (int64_t oc = 0; oc < ne01; oc++) {
+-                    float val = (float)col_acc[oc] * combined_scale + bias_data[oc];
+-                    float_buf[(col0 + c) * ne01 + oc] = val;
+-                    float av = val < 0.0f ? -val : val;
+-                    if (av > local_absmax) local_absmax = av;
+-                }
++                // vectorised epilogue (src/ggml-vae-i8_s-mad.cpp)
++                const float amax = vibeasr_i8s_dequant_absmax(
++                    acc_buf + c * ne01, ne01, combined_scale, bias_data, 0.0f,
++                    float_buf + (col0 + c) * ne01);
++                if (amax > local_absmax) local_absmax = amax;
+             }
+         }
+ 
+@@ -19400,14 +19388,10 @@ static void ggml_compute_forward_mul_mat_add_relu(
+         const float inv_scale = (global_max != 0.0f) ? 127.0f / global_max : 0.0f;
+ 
+         if (col0 < col1) {
+-            for (int64_t c = col0; c < col1; c++) {
+-                for (int64_t oc = 0; oc < ne01; oc++) {
+-                    float v = float_buf[c * ne01 + oc] * inv_scale;
+-                    v = v < -127.0f ? -127.0f : (v > 127.0f ? 127.0f : v);
+-                    int8_t q = (int8_t)roundf(v);
+-                    ((int8_t *)dst->data)[c * ne01 + oc] = q < 0 ? 0 : q;
+-                }
+-            }
++            // vectorised epilogue (src/ggml-vae-i8_s-mad.cpp)
++            vibeasr_i8s_quant_i8(float_buf + col0 * ne01,
++                                 (int8_t *)dst->data + col0 * ne01,
++                                 (col1 - col0) * ne01, inv_scale, /*relu=*/1);
+         }
+ 
+         if (ith == 0) {

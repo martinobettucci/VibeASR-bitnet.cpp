@@ -29,6 +29,28 @@ void ggml_vec_dot_i8_i8(int n, int32_t * s, size_t bs, const void * vx, size_t b
 // edges when nr or nc is not a multiple of the tile.
 void ggml_gemm_i8_i8_tiled(int n, int32_t * s, size_t bs, const void * vx, const void * vy, int nr, int nc);
 
+// ---------------------------------------------------------------------------
+// Vectorised epilogues for the fused I8_S ops.
+//
+// After every fused matmul/conv the runtime makes two full passes over the output:
+// int32 -> float with scale and bias while tracking the absolute maximum, then
+// float -> int8 with clamp and roundf. Those passes were scalar -- roundf is a libm
+// call per element -- and they run on multi-megabyte activations at every VAE layer,
+// which made them a large share of encoder time despite doing no matmul work.
+//
+// Semantics match the scalar loops exactly: mul-then-add (no FMA contraction), and
+// round-half-away-from-zero implemented as trunc(v + copysign(0.5, v)), which agrees
+// with roundf everywhere in the clamped [-127, 127] range.
+// ---------------------------------------------------------------------------
+
+// out[i] = acc[i]*scale + (bias ? bias[i] : bias_scalar); returns max |out[i]|.
+float vibeasr_i8s_dequant_absmax(const int32_t * acc, int64_t n, float scale,
+                                 const float * bias, float bias_scalar, float * out);
+
+// out[i] = (int8) roundf(clamp(in[i]*inv_scale, -127, 127)); relu clamps at 0.
+void vibeasr_i8s_quant_i8(const float * in, int8_t * out, int64_t n,
+                          float inv_scale, int relu);
+
 // Optimized INT8 × INT8 vec_dot for n=4 (process 8 columns simultaneously)
 void ggml_vec_dot_i8_i8_n4_col8(
     int32_t * s, size_t bs,

@@ -125,6 +125,103 @@ VIBEASR_TGT_VNNI static void vae_dot_vnni_shared(
 }
 #endif  // x86
 
+// ---------------------------------------------------------------------------
+// Vectorised epilogues for the fused I8_S ops (see header for context).
+// ---------------------------------------------------------------------------
+
+#if defined(VIBEASR_HAS_AVX512_PATH)
+
+VIBEASR_TGT_AVX512 static float dequant_absmax_avx512(
+        const int32_t * acc, int64_t n, float scale,
+        const float * bias, float bias_scalar, float * out) {
+    const __m512 vscale = _mm512_set1_ps(scale);
+    const __m512 vbias_s = _mm512_set1_ps(bias_scalar);
+    const __m512 signmask = _mm512_castsi512_ps(_mm512_set1_epi32(0x7fffffff));
+    __m512 vmax = _mm512_setzero_ps();
+
+    int64_t i = 0;
+    for (; i + 16 <= n; i += 16) {
+        __m512 v = _mm512_cvtepi32_ps(_mm512_loadu_si512((const void *)(acc + i)));
+        // mul then add, not fmadd: the scalar loop rounds the intermediate product,
+        // and bit-identical output is the acceptance test for this rewrite.
+        v = _mm512_mul_ps(v, vscale);
+        v = _mm512_add_ps(v, bias ? _mm512_loadu_ps(bias + i) : vbias_s);
+        _mm512_storeu_ps(out + i, v);
+        vmax = _mm512_max_ps(vmax, _mm512_and_ps(v, signmask));
+    }
+    float amax = _mm512_reduce_max_ps(vmax);
+    for (; i < n; i++) {
+        float v = (float) acc[i] * scale + (bias ? bias[i] : bias_scalar);
+        out[i] = v;
+        float av = v < 0.0f ? -v : v;
+        if (av > amax) amax = av;
+    }
+    return amax;
+}
+
+VIBEASR_TGT_AVX512 static void quant_i8_avx512(
+        const float * in, int8_t * out, int64_t n, float inv_scale, int relu) {
+    const __m512 vs   = _mm512_set1_ps(inv_scale);
+    const __m512 vlo  = _mm512_set1_ps(-127.0f);
+    const __m512 vhi  = _mm512_set1_ps(127.0f);
+    const __m512 vhalf = _mm512_set1_ps(0.5f);
+    const __m512 vsign = _mm512_castsi512_ps(_mm512_set1_epi32(0x80000000));
+    const __m128i zero8 = _mm_setzero_si128();
+
+    int64_t i = 0;
+    for (; i + 16 <= n; i += 16) {
+        __m512 v = _mm512_mul_ps(_mm512_loadu_ps(in + i), vs);
+        v = _mm512_min_ps(_mm512_max_ps(v, vlo), vhi);
+        // round half away from zero, as roundf does: trunc(v + copysign(0.5, v))
+        const __m512 half = _mm512_or_ps(vhalf, _mm512_and_ps(v, vsign));
+        __m512i q = _mm512_cvttps_epi32(_mm512_add_ps(v, half));
+        __m128i b = _mm512_cvtsepi32_epi8(q);  // saturating, but |q| <= 127 already
+        if (relu) b = _mm_max_epi8(b, zero8);
+        _mm_storeu_si128((__m128i *)(out + i), b);
+    }
+    for (; i < n; i++) {
+        float v = in[i] * inv_scale;
+        v = v < -127.0f ? -127.0f : (v > 127.0f ? 127.0f : v);
+        int8_t q = (int8_t) roundf(v);
+        out[i] = relu && q < 0 ? 0 : q;
+    }
+}
+
+#endif  // VIBEASR_HAS_AVX512_PATH
+
+float vibeasr_i8s_dequant_absmax(const int32_t * acc, int64_t n, float scale,
+                                 const float * bias, float bias_scalar, float * out) {
+#if defined(VIBEASR_HAS_AVX512_PATH)
+    if (vibeasr_isa() >= VIBEASR_ISA_AVX512) {
+        return dequant_absmax_avx512(acc, n, scale, bias, bias_scalar, out);
+    }
+#endif
+    float amax = 0.0f;
+    for (int64_t i = 0; i < n; i++) {
+        float v = (float) acc[i] * scale + (bias ? bias[i] : bias_scalar);
+        out[i] = v;
+        float av = v < 0.0f ? -v : v;
+        if (av > amax) amax = av;
+    }
+    return amax;
+}
+
+void vibeasr_i8s_quant_i8(const float * in, int8_t * out, int64_t n,
+                          float inv_scale, int relu) {
+#if defined(VIBEASR_HAS_AVX512_PATH)
+    if (vibeasr_isa() >= VIBEASR_ISA_AVX512) {
+        quant_i8_avx512(in, out, n, inv_scale, relu);
+        return;
+    }
+#endif
+    for (int64_t i = 0; i < n; i++) {
+        float v = in[i] * inv_scale;
+        v = v < -127.0f ? -127.0f : (v > 127.0f ? 127.0f : v);
+        int8_t q = (int8_t) roundf(v);
+        out[i] = relu && q < 0 ? 0 : q;
+    }
+}
+
 void ggml_vec_dot_i8_i8_1x1(int n, int32_t * s, size_t bs, const void * vx, size_t bx, const void * vy, size_t by, int nrc) {
 #if defined(VIBEASR_HAS_AVX512_PATH)
     if (vibeasr_isa() >= VIBEASR_ISA_VNNI) {
