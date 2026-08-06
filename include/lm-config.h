@@ -13,6 +13,12 @@
     //   block   32               925 ms   <- default
     //   block   64               935 ms
     //
+    // CAUTION: those figures are single-run and this VM has ~2x transient variance,
+    // so the spread between them is not trustworthy -- repeated measurement of the
+    // combined change gives 1.10x, not the 2.95x these numbers imply. 32 is still the
+    // best of the four; the margin is what is unreliable. Re-run with --reps to
+    // confirm on your hardware.
+    //
     // Decode is unaffected: it is a GEMV with nrc=1, so there are no rows to block.
     #ifndef ROW_BLOCK_SIZE
         #define ROW_BLOCK_SIZE 32

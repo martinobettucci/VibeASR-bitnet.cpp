@@ -210,35 +210,47 @@ Work done on this fork, measured on **Intel Xeon @2.8 GHz (Cascade Lake, 4 cores
 AVX-512F/BW/DQ/VL + AVX512_VNNI, 15 GB)** against an 8.38 s FLEURS clip.
 Everything below is reproduced by `./bench/run_all.sh` — see [bench/README.md](bench/README.md).
 
-### Speed: 2.08× end to end
+### Speed: 1.16–1.42× end to end
 
-| Stage | Upstream | This fork | |
-|:--|--:|--:|--:|
-| VAE encode | 9718 ms | 5643 ms | 1.72× |
-| LM prefill | 2727 ms | 754 ms | 3.62× |
-| LM decode | ~1600 ms | 878 ms | 1.82× |
-| **Compute total** | **15161 ms** | **7275 ms** | **2.08×** |
-| **RTF, 4 threads** | **1.81** | **0.868** | real-time |
+`bench/rtf_compare.sh`, three configurations back to back on the same clips and box.
+4 clips, 37.0 s of audio, compute-only RTF (model load excluded):
 
-Most of that came from two integers, not from SIMD. `VAE_ROW_BLOCK_SIZE` and
-`ROW_BLOCK_SIZE` set how many activation rows go into one `vec_dot` call in the I8_S
-and I2_S GEMMs. Both were 4, so one clip issued **194 million** `vec_dot` calls
-averaging ~1200 MACs each, running at roughly **2% of this CPU's int8 peak**. The
-arithmetic was never the bottleneck — the per-call prologue, epilogue and horizontal
-reduction were.
+| Threads | upstream | fork-code | fork-full | speedup |
+|--:|--:|--:|--:|--:|
+| 1 | 3.748 | 2.811 | 2.821 | 1.33× |
+| 2 | 2.136 | 1.508 | 1.509 | 1.42× |
+| 4 | 1.048 | 0.917 | **0.903** | 1.16× |
 
-| Row block | VAE encode | LM prefill | vec_dot calls |
-|--:|--:|--:|--:|
-| 4 (upstream) | 9718 ms | 2727 ms | 194.8M |
-| 16 | 6524 ms | 1025 ms | 52.9M |
-| **32** | **6289 ms** | **925 ms** | 31.9M |
-| 64 | 6504 ms | 935 ms | 25.1M |
+`upstream` is AVX2 kernels with row blocks at 4 and the released LM; `fork-code` adds
+the AVX-512 VNNI kernels and row blocks at 32; `fork-full` also swaps in the slim LM.
 
-Past 32 the win reverses: call count keeps falling but the activation rows stop
-fitting in L1. Re-tune with `bench/row_block_sweep.sh --macro <NAME>`.
+Two things this table says plainly. The gain **shrinks as threads go up** — by 4
+threads the pipeline is closer to memory-bound, where fewer instructions buy less.
+And `fork-code` → `fork-full` is worth about **1.5%**: dropping 467 MB only touches
+decode, which is roughly 11% of compute. **The size work paid for itself in bytes,
+not in seconds.**
 
-This is result-preserving, and that was verified rather than assumed — transcripts
-hashed across 3 clips × 2 thread counts are byte-identical between block 4 and 32.
+The row blocks (`VAE_ROW_BLOCK_SIZE`, `ROW_BLOCK_SIZE` — how many activation rows go
+into one `vec_dot` call) are the largest single contributor. At 4, one clip issues
+**194 million** `vec_dot` calls averaging ~1200 MACs each. Measured over 7 runs per
+value on the 8.38 s clip, total compute:
+
+| Row block | median | min–max |
+|--:|--:|:--|
+| 4 (upstream) | 8451 ms | 8040–8586 |
+| **32** | **7607 ms** | 7300–7875 |
+
+**1.10×.** This is result-preserving — transcripts hashed across 3 clips × 2 thread
+counts are byte-identical between block 4 and 32. Re-tune with
+`bench/row_block_sweep.sh --macro <NAME>`.
+
+> **A correction.** Earlier revisions of this section claimed 2.08× end to end, 1.55×
+> on the VAE and 2.95× on prefill. Those came from single-run sweeps, and this VM has
+> roughly 2× transient variance — the slow-configuration rows happened to land in slow
+> windows. Repeated measurement (7 reps, non-overlapping ranges) gives the numbers
+> above. The sweep script now requires repetitions and reports median and spread, and
+> it no longer times with `VIBEASR_KERNEL_STATS` enabled, since that profiler's cost
+> is per-call and would itself bias results toward larger blocks.
 
 ### Accuracy: the AVX2 kernels were wrong
 

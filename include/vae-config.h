@@ -8,15 +8,15 @@
 // Raising the block amortises all three over more rows without changing any result.
 //
 // Measured with bench/row_block_sweep.sh on Xeon @2.8 GHz (Cascade Lake, AVX-512
-// VNNI, 4 cores), 8.4 s clip, VAE encode acoustic + semantic:
+// VNNI, 4 cores), 8.4 s clip, total compute, median of 7 runs:
 //
-//   block    4 (upstream)   9718 ms   194.8M vec_dot calls
-//   block   16              6524 ms    52.9M
-//   block   32              6289 ms    31.9M     <- default
-//   block   64              6504 ms    25.1M
+//   block    4 (upstream)   8451 ms  (8040-8586)   194.8M vec_dot calls
+//   block   32              7607 ms  (7300-7875)    31.9M   <- default, 1.10x
 //
-// Past 32 the activation rows stop fitting in L1 and the win from fewer calls is
-// spent again on cache misses. Override at configure time with
+// Repetitions are not optional here: a single run on this VM can be 2x off, and the
+// first single-run version of this sweep reported 1.55x for the same change.
+//
+// Override at configure time with
 // -DVAE_ROW_BLOCK_SIZE=N to re-tune -- note it must reach the C compiler as well as
 // the C++ one, since the blocking loop lives in ggml-aarch64.c.
 #define VAE_ACT_PARALLEL
