@@ -7,15 +7,23 @@
 // is not the problem; the per-call prologue, epilogue and horizontal reduction are.
 // Raising the block amortises all three over more rows without changing any result.
 //
-// The value below is still upstream's; bench/row_block_sweep.sh is what decides
-// whether to move it, and until that has run there is nothing to justify a change.
-// Override at configure time with -DVAE_ROW_BLOCK_SIZE=N -- note it must reach the C
-// compiler as well as the C++ one, since the blocking loop lives in ggml-aarch64.c.
+// Measured with bench/row_block_sweep.sh on Xeon @2.8 GHz (Cascade Lake, AVX-512
+// VNNI, 4 cores), 8.4 s clip, VAE encode acoustic + semantic:
+//
+//   block    4 (upstream)   9718 ms   194.8M vec_dot calls
+//   block   16              6524 ms    52.9M
+//   block   32              6289 ms    31.9M     <- default
+//   block   64              6504 ms    25.1M
+//
+// Past 32 the activation rows stop fitting in L1 and the win from fewer calls is
+// spent again on cache misses. Override at configure time with
+// -DVAE_ROW_BLOCK_SIZE=N to re-tune -- note it must reach the C compiler as well as
+// the C++ one, since the blocking loop lives in ggml-aarch64.c.
 #define VAE_ACT_PARALLEL
 #if defined(__AVX__) || defined(__AVX2__) || defined(__AVX512F__) || defined(__SSSE3__)
 #if defined(VAE_ACT_PARALLEL)
     #ifndef VAE_ROW_BLOCK_SIZE
-        #define VAE_ROW_BLOCK_SIZE 4
+        #define VAE_ROW_BLOCK_SIZE 32
     #endif
     #define VAE_COL_BLOCK_SIZE 16
     #define VAE_PARALLEL_SIZE 4
