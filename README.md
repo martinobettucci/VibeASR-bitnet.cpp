@@ -302,7 +302,9 @@ that normalisation WER is inflated by 1–2 points).
 | English | 8.23 | 8.58 | +0.34 |
 | Portuguese | 8.90 | 8.57 | −0.33 |
 | Italian | 9.67 | 9.52 | −0.16 |
+| German | 14.63 | 14.98 | +0.35 |
 | French | 34.08 | 35.88 | +1.81 |
+| **corpus** | **14.31** | **14.69** | **+0.38** |
 
 Dropping the F16 head costs about **+0.4 WER corpus-wide for −47% LM size**. Small,
 but not free — the output projection moves from F16 to Q6_K.

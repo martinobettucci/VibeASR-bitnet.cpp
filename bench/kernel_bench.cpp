@@ -186,8 +186,10 @@ int main(int argc, char ** argv) {
            vibeasr_isa_name(vibeasr_isa_detected()), vibeasr_isa_name(vibeasr_isa()));
 
     // Shapes from the model: VAE stage widths 32..8192, LM hidden 1536 / FFN 8960.
-    const int i8_shapes[][2] = {{32, 16}, {128, 16}, {512, 16}, {2048, 16}, {8192, 16}};
-    const int i2_shapes[][2] = {{1536, 4}, {1536, 16}, {8960, 4}, {8960, 16}};
+    // nrc values follow the GEMM row blocks: 32 is what prefill now issues, 4 and 16
+    // are kept because the earlier routing decision was made at those widths.
+    const int i8_shapes[][2] = {{32, 32}, {128, 32}, {512, 32}, {2048, 32}, {8192, 32}};
+    const int i2_shapes[][2] = {{1536, 4}, {1536, 16}, {1536, 32}, {8960, 16}, {8960, 32}};
 
     int rc = 0;
     struct { const char * label; int amp; bool fatal; } regimes[] = {
