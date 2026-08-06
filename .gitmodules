@@ -2,3 +2,8 @@
 	path = 3rdparty/llama.cpp
 	url = https://github.com/XsquirrelC/llama.cpp.git
 	branch = vibeasr-dev
+	# setup_env.py applies patches/*.patch into this submodule, so its working tree
+	# is modified by design and stays that way. Without this, every build leaves a
+	# permanently dirty `git status` in the parent repo. Changed commits are still
+	# reported -- only local modifications are ignored.
+	ignore = dirty
