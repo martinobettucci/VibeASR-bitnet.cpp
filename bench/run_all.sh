@@ -11,6 +11,8 @@
 #   CLIPS=4 LANGS=en_us,fr_fr,de_de ./bench/run_all.sh
 #   SKIP="fetch requant" ./bench/run_all.sh
 #
+# Step names: build models kernels requant fetch sweep variants scaling
+#
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -22,9 +24,15 @@ MODELS="${MODELS:-models/vibeasr}"
 SKIP="${SKIP:-}"
 
 VAE="$MODELS/vibeasr-vae-encoder-i8_s.gguf"
-LM_BASE="$MODELS/vibeasr-lm-i2_s-embed-q6_k.gguf"
-LM_Q6="$MODELS/vibeasr-lm-i2_s-head-q6_k.gguf"
-LM_Q4="$MODELS/vibeasr-lm-i2_s-head-q4_k.gguf"
+LM_BASE="$MODELS/vibeasr-lm-i2_s-embed-q6_k.gguf"   # as released
+LM_TIED="$MODELS/vibeasr-lm-i2_s-tied.gguf"         # redundant F16 output.weight dropped
+LM_Q5="$MODELS/vibeasr-lm-i2_s-tied-q5k.gguf"       # + tied embedding at Q5_K
+LM_Q4="$MODELS/vibeasr-lm-i2_s-tied-q4k.gguf"       # + tied embedding at Q4_K
+
+# Languages the model actually handles, as measured by the full EU sweep. The other
+# EU official languages are not in VibeVoice-ASR's training mix and score far worse;
+# LANGS=eu19 still runs all of them.
+EU_SUPPORTED="${EU_SUPPORTED:-es_419,it_it,de_de,pt_br,en_us,fr_fr}"
 
 skip() { case " $SKIP " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 step() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
@@ -56,12 +64,18 @@ if ! skip kernels; then
   VIBEASR_ISA=avx2 ./build/bin/kernel_bench | tee bench/results/kernels_avx2.txt
 fi
 
-# --- 3. re-quantise the F16 lm_head ---------------------------------------
+# --- 3. squeeze the LM ----------------------------------------------------
 if ! skip requant; then
-  step "re-quantise output.weight (F16 -> Q6_K, Q4_K)"
-  [ -f "$LM_Q6" ] || ./build/bin/requant_lm_head "$LM_BASE" "$LM_Q6" --type q6_k -t "$THREADS"
-  [ -f "$LM_Q4" ] || ./build/bin/requant_lm_head "$LM_BASE" "$LM_Q4" --type q4_k -t "$THREADS"
-  ls -l "$LM_BASE" "$LM_Q6" "$LM_Q4" | awk '{printf "  %8.1f MB  %s\n", $5/1e6, $9}'
+  step "drop the redundant F16 output.weight, then squeeze the tied embedding"
+  # output.weight is bit-identical to token_embd (tie_word_embeddings=true) and the
+  # loader falls back to token_embd when it is absent, so dropping it is free.
+  [ -f "$LM_TIED" ] || ./build/bin/requant_lm_head "$LM_BASE" "$LM_TIED" --drop
+  [ -f "$LM_Q5" ]   || ./build/bin/requant_lm_head "$LM_TIED" "$LM_Q5" \
+                          --tensor token_embd.weight --type q5_k -t "$THREADS"
+  [ -f "$LM_Q4" ]   || ./build/bin/requant_lm_head "$LM_TIED" "$LM_Q4" \
+                          --tensor token_embd.weight --type q4_k -t "$THREADS"
+  ls -l "$LM_BASE" "$LM_TIED" "$LM_Q5" "$LM_Q4" | awk '{printf "  %8.1f MB  %s\n", $5/1e6, $9}'
+  python3 bench/model_report.py "$LM_BASE" "$LM_TIED" "$LM_Q4" "$VAE"
 fi
 
 # --- 4. evaluation data ---------------------------------------------------
@@ -70,23 +84,28 @@ if ! skip fetch; then
   python3 bench/fetch_fleurs.py --langs "$LANGS" -n "$CLIPS"
 fi
 
-# --- 5. WER / RTF sweeps --------------------------------------------------
+# --- 5a. language coverage: all of EU-19, released model ------------------
 if ! skip sweep; then
-  step "WER + RTF: released model, AVX-512 VNNI"
+  step "WER + RTF across $LANGS (released model, AVX-512 VNNI)"
   python3 bench/run_asr.py --langs "$LANGS" -n "$CLIPS" -t "$THREADS" \
       --lm "$LM_BASE" --tag eu19_vnni
+fi
 
-  step "WER + RTF: released model, AVX2 baseline"
-  python3 bench/run_asr.py --langs "$LANGS" -n "$CLIPS" -t "$THREADS" \
-      --lm "$LM_BASE" --isa avx2 --tag eu19_avx2
+# --- 5b. model variants, on the languages the model supports --------------
+if ! skip variants; then
+  step "WER + RTF per LM variant, on $EU_SUPPORTED"
+  python3 bench/run_asr.py --langs "$EU_SUPPORTED" -n "$CLIPS" -t "$THREADS" \
+      --lm "$LM_BASE" --tag eu_released
+  python3 bench/run_asr.py --langs "$EU_SUPPORTED" -n "$CLIPS" -t "$THREADS" \
+      --lm "$LM_TIED" --tag eu_tied
+  python3 bench/run_asr.py --langs "$EU_SUPPORTED" -n "$CLIPS" -t "$THREADS" \
+      --lm "$LM_Q5"   --tag eu_tied_q5k
+  python3 bench/run_asr.py --langs "$EU_SUPPORTED" -n "$CLIPS" -t "$THREADS" \
+      --lm "$LM_Q4"   --tag eu_tied_q4k
 
-  step "WER + RTF: lm_head Q6_K"
-  python3 bench/run_asr.py --langs "$LANGS" -n "$CLIPS" -t "$THREADS" \
-      --lm "$LM_Q6" --tag eu19_head_q6k
-
-  step "WER + RTF: lm_head Q4_K"
-  python3 bench/run_asr.py --langs "$LANGS" -n "$CLIPS" -t "$THREADS" \
-      --lm "$LM_Q4" --tag eu19_head_q4k
+  step "WER + RTF: AVX2 baseline, for the ISA comparison"
+  python3 bench/run_asr.py --langs "$EU_SUPPORTED" -n "$CLIPS" -t "$THREADS" \
+      --lm "$LM_BASE" --isa avx2 --tag eu_released_avx2
 fi
 
 # --- 6. thread scaling ----------------------------------------------------
@@ -98,5 +117,9 @@ fi
 
 # --- 7. tables ------------------------------------------------------------
 step "summary"
+echo "--- language coverage across $LANGS"
 python3 bench/summarize.py eu19_vnni
-python3 bench/summarize.py eu19_vnni eu19_avx2 eu19_head_q6k eu19_head_q4k --diff
+echo "--- LM variants on the supported subset"
+python3 bench/summarize.py eu_released eu_tied eu_tied_q5k eu_tied_q4k --diff
+echo "--- AVX-512 VNNI vs AVX2"
+python3 bench/summarize.py eu_released eu_released_avx2 --diff

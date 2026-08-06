@@ -171,8 +171,9 @@ int main(int argc, char ** argv) {
         }
     }
 
-    // Quantise row blocks in parallel. ggml_quantize_chunk writes each block of rows
-    // to its own slice of the destination, so the threads never overlap.
+    // Quantise row blocks in parallel. ggml_quantize_chunk takes base pointers and an
+    // element offset, and does the src/dst arithmetic itself -- passing pre-offset
+    // pointers would advance twice. Each thread owns a disjoint span of rows.
     const size_t qrow = ggml_row_size(target_type, n_per_row);
     std::vector<char> qdata(qrow * nrows);
     const int64_t chunk = (nrows + nthreads - 1) / nthreads;
@@ -182,9 +183,8 @@ int main(int argc, char ** argv) {
         const int64_t r1 = r0 + chunk < nrows ? r0 + chunk : nrows;
         if (r0 >= r1) break;
         pool.emplace_back([&, r0, r1]() {
-            ggml_quantize_chunk(target_type, f32.data() + r0 * n_per_row,
-                                qdata.data() + qrow * r0, r0, r1 - r0, n_per_row,
-                                /*imatrix =*/ NULL);
+            ggml_quantize_chunk(target_type, f32.data(), qdata.data(),
+                                r0 * n_per_row, r1 - r0, n_per_row, /*imatrix =*/ NULL);
         });
     }
     for (auto & th : pool) th.join();
