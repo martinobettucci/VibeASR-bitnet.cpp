@@ -204,6 +204,122 @@ python utils/convert_vae_to_gguf.py <safetensors-dir>
 
 ---
 
+## CPU optimisation on AVX-512
+
+Work done on this fork, measured on **Intel Xeon @2.8 GHz (Cascade Lake, 4 cores,
+AVX-512F/BW/DQ/VL + AVX512_VNNI, 15 GB)** against an 8.38 s FLEURS clip.
+Everything below is reproduced by `./bench/run_all.sh` — see [bench/README.md](bench/README.md).
+
+### Speed: 2.08× end to end
+
+| Stage | Upstream | This fork | |
+|:--|--:|--:|--:|
+| VAE encode | 9718 ms | 5643 ms | 1.72× |
+| LM prefill | 2727 ms | 754 ms | 3.62× |
+| LM decode | ~1600 ms | 878 ms | 1.82× |
+| **Compute total** | **15161 ms** | **7275 ms** | **2.08×** |
+| **RTF, 4 threads** | **1.81** | **0.868** | real-time |
+
+Most of that came from two integers, not from SIMD. `VAE_ROW_BLOCK_SIZE` and
+`ROW_BLOCK_SIZE` set how many activation rows go into one `vec_dot` call in the I8_S
+and I2_S GEMMs. Both were 4, so one clip issued **194 million** `vec_dot` calls
+averaging ~1200 MACs each, running at roughly **2% of this CPU's int8 peak**. The
+arithmetic was never the bottleneck — the per-call prologue, epilogue and horizontal
+reduction were.
+
+| Row block | VAE encode | LM prefill | vec_dot calls |
+|--:|--:|--:|--:|
+| 4 (upstream) | 9718 ms | 2727 ms | 194.8M |
+| 16 | 6524 ms | 1025 ms | 52.9M |
+| **32** | **6289 ms** | **925 ms** | 31.9M |
+| 64 | 6504 ms | 935 ms | 25.1M |
+
+Past 32 the win reverses: call count keeps falling but the activation rows stop
+fitting in L1. Re-tune with `bench/row_block_sweep.sh --macro <NAME>`.
+
+This is result-preserving, and that was verified rather than assumed — transcripts
+hashed across 3 clips × 2 thread counts are byte-identical between block 4 and 32.
+
+### Accuracy: the AVX2 kernels were wrong
+
+The AVX2 I8_S kernels accumulate `vpmaddubsw` results in int16 and only flush to
+int32 every 32 blocks, so they **wrap** on activations spanning the full ±127 range
+that `quantize_i8_s` emits. `vpdpbusd` accumulates in int32 and cannot.
+`bench/kernel_bench.cpp` checks every path against an exact int32 scalar reference:
+
+| Path | narrow (\|v\| ≤ 8) | full (\|v\| ≤ 127) |
+|:--|--:|--:|
+| AVX-512 VNNI | 360/360 | **360/360** |
+| AVX2 | 360/360 | **216/360** |
+
+The I2_S kernels are unaffected — ternary weights keep partial sums small.
+
+Kernels select the widest supported path at run time (`VIBEASR_ISA=avx2\|avx512\|vnni\|amx`
+forces one; `VIBEASR_KERNEL_STATS=1` reports where time goes). AMX-INT8 is detected,
+including the `arch_prctl` tile request, but no tile kernels ship — this hardware
+cannot execute them, so they could not be validated.
+
+> On a 1-FMA-unit AVX-512 part, zmm `vpdpbusd` retires 1/cycle and ymm `vpmaddubsw`
+> 2/cycle — both 64 int8 products per cycle. VNNI buys correctness here, not raw
+> throughput. Parts with two FMA units should see more.
+
+### Size: the LM shipped a duplicate tensor
+
+`output.weight` was **F16, 466.7 MB — 47% of the LM** — while `token_embd.weight` sat
+beside it as Q6_K at 191.4 MB. In the source checkpoint `tie_word_embeddings` is true
+and `lm_head.weight` is **bit-identical** to `embed_tokens.weight`, so it was the same
+matrix twice, the second copy at higher precision. llama.cpp loads
+`LLM_TENSOR_OUTPUT` as `TENSOR_NOT_REQUIRED` and falls back to `token_embd`, so it can
+simply be dropped:
+
+| | LM | Total | bits/weight |
+|:--|--:|--:|--:|
+| As released | 992.9 MB | 1.70 GB | 4.44 |
+| `requant_lm_head --drop` | **526.1 MB** | **1.23 GB** | **2.69** |
+
+Published as [P2Enjoy/VibeVoice-ASR-BitNet-slim](https://huggingface.co/P2Enjoy/VibeVoice-ASR-BitNet-slim).
+`llama-quantize` cannot do this — it has no way to leave the I2_S body alone — hence
+`tools/requant_lm_head.cpp`.
+
+Note the ternary body is packed at exactly **2.000** bits/weight, not log₂3 = 1.585:
+I2_S stores four ternary values per byte and wastes one of four codes, which is 68 MB
+of padding (20.8% of the body). `bench/model_report.py` prints the full budget.
+
+### WER on the languages the model supports
+
+VibeVoice-ASR was trained on **en, zh, fr, it, ko, pt, vi**. Of the EU official
+languages that means English, French, Italian and Portuguese are in-distribution;
+Spanish and German are not but generalise usably. Others degrade sharply and no
+amount of quantisation or kernel work changes that.
+
+FLEURS, 24 clips per language, greedy, `-t 2`, numbers spelled out on both sides
+(the references write `35 mm` where the model says `trente-cinq millimètres`; without
+that normalisation WER is inflated by 1–2 points).
+
+| Language | Released | Slim (`--drop`) | Δ |
+|:--|--:|--:|--:|
+| Spanish | 6.47 | 6.47 | +0.00 |
+| English | 8.23 | 8.58 | +0.34 |
+| Portuguese | 8.90 | 8.57 | −0.33 |
+| Italian | 9.67 | 9.52 | −0.16 |
+| French | 34.08 | 35.88 | +1.81 |
+
+Dropping the F16 head costs about **+0.4 WER corpus-wide for −47% LM size**. Small,
+but not free — the output projection moves from F16 to Q6_K.
+
+FLEURS French is much harder than the MLC-FR set the tech report scores 17.41 on; for
+calibration, FLEURS Italian here (9.67) is *better* than the report's MLC-IT (17.23),
+so the gap is the corpus, not the pipeline.
+
+### Known issue: output depends on thread count
+
+`en_us/0000` decodes "the periodic table" at 1 and 2 threads and "a priori" at 4 —
+same binary, same weights, greedy sampling. Some float reduction in the graph is
+partitioned by thread count. Pre-existing, not introduced here, but it means WER is
+only comparable between runs at equal `-t`.
+
+---
+
 ## Citation
 
 ```bibtex
