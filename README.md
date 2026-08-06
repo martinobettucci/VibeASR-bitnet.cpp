@@ -210,25 +210,28 @@ Work done on this fork, measured on **Intel Xeon @2.8 GHz (Cascade Lake, 4 cores
 AVX-512F/BW/DQ/VL + AVX512_VNNI, 15 GB)** against an 8.38 s FLEURS clip.
 Everything below is reproduced by `./bench/run_all.sh` — see [bench/README.md](bench/README.md).
 
-### Speed: 1.16–1.42× end to end
+### Speed: 1.59–1.78× end to end
 
 `bench/rtf_compare.sh`, three configurations back to back on the same clips and box.
 4 clips, 37.0 s of audio, compute-only RTF (model load excluded):
 
 | Threads | upstream | fork-code | fork-full | speedup |
 |--:|--:|--:|--:|--:|
-| 1 | 3.748 | 2.811 | 2.821 | 1.33× |
-| 2 | 2.136 | 1.508 | 1.509 | 1.42× |
-| 4 | 1.048 | 0.917 | **0.903** | 1.16× |
+| 1 | 3.463 | 1.944 | 2.025 | 1.78× |
+| 2 | 1.785 | 1.032 | 1.031 | 1.73× |
+| 4 | 1.021 | **0.641** | 0.649 | **1.59×** |
 
 `upstream` is AVX2 kernels with row blocks at 4 and the released LM; `fork-code` adds
-the AVX-512 VNNI kernels and row blocks at 32; `fork-full` also swaps in the slim LM.
+the AVX-512 VNNI kernels, row blocks at 32, the register-tiled INT8 GEMM and the
+vectorised fused-op epilogues; `fork-full` also swaps in the slim LM. All fork paths
+gate on the ISA at run time, so the `upstream` column genuinely runs the original
+code, and one binary serves both.
 
-Two things this table says plainly. The gain **shrinks as threads go up** — by 4
-threads the pipeline is closer to memory-bound, where fewer instructions buy less.
-And `fork-code` → `fork-full` is worth about **1.5%**: dropping 467 MB only touches
-decode, which is roughly 11% of compute. **The size work paid for itself in bytes,
-not in seconds.**
+`fork-code` → `fork-full` is within noise: dropping 467 MB only touches decode,
+roughly 11% of compute. **The size work paid for itself in bytes, not in seconds.**
+The speedup holding at 2 threads (1.73×) matters for deployment: on a many-core
+server the natural shape is many concurrent streams at 2–3 threads each, each one at
+or under real time.
 
 The row blocks (`VAE_ROW_BLOCK_SIZE`, `ROW_BLOCK_SIZE` — how many activation rows go
 into one `vec_dot` call) are the largest single contributor. At 4, one clip issues
@@ -270,8 +273,22 @@ and `kernel_bench` checks the tile against the scalar reference at 1655 points
 including the ragged edges where it falls back to `vec_dot`.
 
 This one needs a patch to the pinned submodule, since `ggml_gemm_i8_i8` lives there.
-The kernel itself is in `src/`; `patches/0001-ggml-tiled-i8-gemm.patch` only swaps the
-call site, and `setup_env.py` applies it (idempotently) before building.
+The kernel itself is in `src/`; `patches/0001-ggml-i8s-fast-paths.patch` only swaps
+call sites, and `setup_env.py` applies it (idempotently) before building.
+
+#### Vectorised fused-op epilogues
+
+With the tile in place, profiling showed the VAE spending only ~25% of its CPU in
+matmul kernels. The biggest remaining block: after every fused I8_S matmul/conv the
+runtime made two full **scalar** passes over the output — int32 → float with scale
+and bias while tracking the absolute maximum, then float → int8 with clamp and
+`roundf`, a libm call per element — on multi-megabyte activations at every layer.
+
+`vibeasr_i8s_dequant_absmax` and `vibeasr_i8s_quant_i8` (AVX-512, in `src/`) replace
+eight such loops. Bit-exact by construction: mul-then-add ordering is preserved and
+`roundf`'s half-away-from-zero is implemented as `trunc(v + copysign(0.5, v))`;
+transcripts hash identically before and after. 7 runs on the 8.38 s clip, 4 threads:
+tile-only median 6774 ms → **5579 ms** (1.21×), VAE encode ~5650 → ~3770 ms.
 
 > **A correction.** Earlier revisions of this section claimed 2.08× end to end, 1.55×
 > on the VAE and 2.95× on prefill. Those came from single-run sweeps, and this VM has
