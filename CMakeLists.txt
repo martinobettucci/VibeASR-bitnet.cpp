@@ -118,6 +118,22 @@ set_target_properties(kernel_bench PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
+
+# Re-quantise one tensor of an already-quantised GGUF, leaving the I2_S body alone
+# (tools/requant_lm_head.cpp). llama-quantize cannot do this.
+add_executable(requant_lm_head tools/requant_lm_head.cpp)
+
+target_include_directories(requant_lm_head PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/llama.cpp/ggml/include
+)
+
+target_link_libraries(requant_lm_head PRIVATE ggml ${CMAKE_THREAD_LIBS_INIT})
+target_compile_features(requant_lm_head PRIVATE cxx_std_11)
+
+set_target_properties(requant_lm_head PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
 # install
 
 include(GNUInstallDirs)

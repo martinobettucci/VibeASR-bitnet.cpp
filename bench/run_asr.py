@@ -66,8 +66,17 @@ def run_clip(binary, vae, lm, wav, threads, extra_env, timeout):
     cmd = [binary, "--vae-model", vae, "--lm-model", lm, "--audio", wav,
            "-t", str(threads), "--greedy"]
     t0 = time.time()
-    p = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=timeout)
+    try:
+        # errors="replace": greedy decoding on a language the model was not trained
+        # for can emit a token sequence that is not valid UTF-8. That is a result to
+        # record, not a reason to abort the sweep.
+        p = subprocess.run(cmd, capture_output=True, timeout=timeout, env=env)
+    except subprocess.TimeoutExpired:
+        return None, {"error": "timeout"}, time.time() - t0
     wall = time.time() - t0
+    p_stdout = p.stdout.decode("utf-8", errors="replace")
+    p_stderr = p.stderr.decode("utf-8", errors="replace")
+    p = subprocess.CompletedProcess(cmd, p.returncode, p_stdout, p_stderr)
     if p.returncode != 0:
         return None, {"error": p.stderr[-400:]}, wall
 
@@ -97,35 +106,51 @@ def main():
     ap.add_argument("--timeout", type=int, default=600)
     ap.add_argument("--data", default=os.path.join(ROOT, "bench", "data"))
     ap.add_argument("--out", default=os.path.join(ROOT, "bench", "results"))
+    ap.add_argument("--force", action="store_true", help="re-run languages that already have results")
     args = ap.parse_args()
 
     extra_env = {"VIBEASR_ISA": args.isa} if args.isa else {}
-    os.makedirs(args.out, exist_ok=True)
+    outdir = os.path.join(args.out, args.tag)
+    os.makedirs(outdir, exist_ok=True)
     langs = resolve(args.langs)
+    meta = {"tag": args.tag, "threads": args.threads, "isa": args.isa or "auto",
+            "vae": args.vae, "lm": args.lm, "clips_per_lang": args.n}
 
-    records = []
-    print("%-6s %-12s %6s %6s %7s %7s   %s" %
-          ("lang", "name", "WER%", "CER%", "RTF", "RTFall", "clips"))
-    print("-" * 72)
+    print("%-6s %-12s %6s %6s %7s %7s %6s  %s" %
+          ("lang", "name", "WER%", "CER%", "RTF", "RTFall", "clips", "note"))
+    print("-" * 78, flush=True)
 
     for lang in langs:
+        # One file per language, written as soon as that language finishes: a sweep is
+        # hours long and a crash in clip 400 should not cost the first 399.
+        lang_out = os.path.join(outdir, lang + ".json")
+        if os.path.exists(lang_out) and not args.force:
+            summ = json.load(open(lang_out, encoding="utf-8"))["summary"]
+            print("%-6s %-12s %6.2f %6.2f %7.3f %7.3f %6d  cached" %
+                  (lang, EU24.get(lang, ("", lang))[1], summ["wer"], summ["cer"],
+                   summ["rtf"], summ["rtf_all"], summ["clips"]))
+            continue
+
         d = os.path.join(args.data, lang)
         refs_path = os.path.join(d, "refs.jsonl")
         if not os.path.exists(refs_path):
-            print("%-6s (no data -- run fetch_fleurs.py)" % lang)
+            print("%-6s %-12s %s" % (lang, EU24.get(lang, ("", lang))[1],
+                                     "no data -- run fetch_fleurs.py"))
             continue
         refs = [json.loads(l) for l in open(refs_path, encoding="utf-8")]
         if args.n:
             refs = refs[: args.n]
 
+        records = []
         werr = wtot = cerr = ctot = 0
         audio_s = compute_s = total_s = 0.0
-        used = 0
+        used = failed = 0
         for r in refs:
             hyp, stats, wall = run_clip(args.bin, args.vae, args.lm,
                                         os.path.join(d, r["wav"]), args.threads,
                                         extra_env, args.timeout)
             if hyp is None:
+                failed += 1
                 records.append({"lang": lang, "wav": r["wav"], **stats})
                 continue
             ref_n, hyp_n = normalise(r["text"]), normalise(hyp)
@@ -142,16 +167,23 @@ def main():
             records.append({"lang": lang, "wav": r["wav"], "duration": r["duration"],
                             "ref": r["text"], "hyp": hyp, "compute_ms": compute, **stats})
 
-        if used and wtot:
-            print("%-6s %-12s %6.2f %6.2f %7.3f %7.3f   %d" %
-                  (lang, EU24.get(lang, ("", lang))[1], 100.0 * werr / wtot,
-                   100.0 * cerr / max(ctot, 1), compute_s / audio_s, total_s / audio_s, used))
+        summary = {
+            "lang": lang, "name": EU24.get(lang, ("", lang))[1], "clips": used, "failed": failed,
+            "audio_sec": round(audio_s, 2), "ref_words": wtot,
+            "wer": 100.0 * werr / wtot if wtot else float("nan"),
+            "cer": 100.0 * cerr / ctot if ctot else float("nan"),
+            "rtf": compute_s / audio_s if audio_s else float("nan"),
+            "rtf_all": total_s / audio_s if audio_s else float("nan"),
+        }
+        with open(lang_out, "w", encoding="utf-8") as f:
+            json.dump({"meta": meta, "summary": summary, "records": records},
+                      f, ensure_ascii=False, indent=1)
+        print("%-6s %-12s %6.2f %6.2f %7.3f %7.3f %6d  %s" %
+              (lang, summary["name"], summary["wer"], summary["cer"],
+               summary["rtf"], summary["rtf_all"], used,
+               "%d failed" % failed if failed else ""), flush=True)
 
-    meta = {"tag": args.tag, "threads": args.threads, "isa": args.isa or "auto",
-            "vae": args.vae, "lm": args.lm, "langs": langs}
-    with open(os.path.join(args.out, args.tag + ".json"), "w", encoding="utf-8") as f:
-        json.dump({"meta": meta, "records": records}, f, ensure_ascii=False, indent=1)
-    print("\nwrote %s" % os.path.join(args.out, args.tag + ".json"))
+    print("\nwrote %s/*.json" % outdir)
 
 
 if __name__ == "__main__":
