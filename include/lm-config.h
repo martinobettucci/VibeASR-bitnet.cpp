@@ -5,8 +5,17 @@
 #define ACT_PARALLEL
 #if defined(__AVX__) || defined(__AVX2__) || defined(__AVX512F__) || defined(__SSSE3__)
 #if defined(ACT_PARALLEL)
+    // Measured with bench/row_block_sweep.sh --macro ROW_BLOCK_SIZE on Xeon @2.8 GHz
+    // (Cascade Lake, AVX-512 VNNI, 4 cores), 8.4 s clip, LM prefill:
+    //
+    //   block    4 (upstream)   2727 ms
+    //   block   16              1025 ms
+    //   block   32               925 ms   <- default
+    //   block   64               935 ms
+    //
+    // Decode is unaffected: it is a GEMV with nrc=1, so there are no rows to block.
     #ifndef ROW_BLOCK_SIZE
-        #define ROW_BLOCK_SIZE 4
+        #define ROW_BLOCK_SIZE 32
     #endif
     #ifndef COL_BLOCK_SIZE
         #define COL_BLOCK_SIZE 32
