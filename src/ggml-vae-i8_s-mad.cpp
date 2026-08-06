@@ -7,6 +7,14 @@
 #include "ggml-cpu-impl.h"
 #include "lm-config.h"
 #include "vae-config.h"
+#include "vibeasr-cpu.h"
+#include "vibeasr-kernel-stats.h"
+
+#if defined(VAE_ACT_PARALLEL)
+#define VAE_ACT_PARALLEL_SELECTED 1
+#else
+#define VAE_ACT_PARALLEL_SELECTED 0
+#endif
 
 #if defined(__AVX__) || defined(__AVX2__) || defined(__AVX512F__) || defined(__SSSE3__)
 #define QK_I8_S 32
@@ -27,7 +35,108 @@ static inline int hsum_i32_8(const __m256i a) {
 }
 #endif
 
+// ---------------------------------------------------------------------------
+// AVX-512 / AVX512-VNNI path
+//
+// The AVX2 kernels below multiply s8 x s8 by folding the sign of x into y
+// (_mm256_sign_epi8), multiplying |x| as u8 through vpmaddubsw, accumulating in
+// int16, and flushing to int32 every 32 blocks to stay ahead of int16 overflow.
+//
+// VNNI's vpdpbusd does u8 x s8 with an int32 accumulator in one instruction, so the
+// int16 stage and its periodic flush disappear entirely, and the lane width doubles.
+// The sign fold survives, using vpabsb plus a masked negate because AVX-512 has no
+// vpsignb. That reproduces the AVX2 kernel bit for bit, including its behaviour at
+// x = -128 (which quantize_i8_s never emits: it clamps to +-127).
+//
+// Selection happens at run time via vibeasr_isa(), so one binary still runs on AVX2.
+// ---------------------------------------------------------------------------
+
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__)
+#define VIBEASR_HAS_AVX512_PATH 1
+#define VIBEASR_TGT_VNNI   __attribute__((target("avx512f,avx512bw,avx512dq,avx512vl,avx512vnni")))
+#define VIBEASR_TGT_AVX512 __attribute__((target("avx512f,avx512bw,avx512dq,avx512vl")))
+
+VIBEASR_TGT_VNNI static inline int32_t hsum_i32_16(__m512i a) {
+    return _mm512_reduce_add_epi32(a);
+}
+
+// acc += |x| (u8) * sign(x)*y (s8), 64 lanes at a time.
+VIBEASR_TGT_VNNI static inline __m512i dp_signed(__m512i acc, __m512i x, __m512i y) {
+    const __mmask64 neg = _mm512_movepi8_mask(x);
+    const __m512i   ax  = _mm512_abs_epi8(x);
+    const __m512i   sy  = _mm512_mask_sub_epi8(y, neg, _mm512_setzero_si512(), y);
+    return _mm512_dpbusd_epi32(acc, ax, sy);
+}
+
+// Dot product over nbytes int8 lanes. Two accumulators hide vpdpbusd's latency.
+VIBEASR_TGT_VNNI static int32_t vae_dot_vnni(const int8_t * px, const int8_t * py, int nbytes) {
+    __m512i a0 = _mm512_setzero_si512();
+    __m512i a1 = _mm512_setzero_si512();
+    int i = 0;
+    for (; i + 128 <= nbytes; i += 128) {
+        a0 = dp_signed(a0, _mm512_loadu_si512((const void *)(px + i)),
+                           _mm512_loadu_si512((const void *)(py + i)));
+        a1 = dp_signed(a1, _mm512_loadu_si512((const void *)(px + i + 64)),
+                           _mm512_loadu_si512((const void *)(py + i + 64)));
+    }
+    for (; i + 64 <= nbytes; i += 64) {
+        a0 = dp_signed(a0, _mm512_loadu_si512((const void *)(px + i)),
+                           _mm512_loadu_si512((const void *)(py + i)));
+    }
+    if (i < nbytes) {  // 32-byte remainder: same op under a lane mask
+        const __mmask64 m = (__mmask64)((1ULL << (nbytes - i)) - 1);
+        a1 = dp_signed(a1, _mm512_maskz_loadu_epi8(m, px + i),
+                           _mm512_maskz_loadu_epi8(m, py + i));
+    }
+    return hsum_i32_16(_mm512_add_epi32(a0, a1));
+}
+
+// nblk independent dot products that share one operand -- the shape both the 1xN
+// (shared y) and Nx1 (shared x) blocked kernels need. Loading the shared vector once
+// per step and reusing it across the block is most of the win at these small n.
+//
+// sign_from_shared says which operand donates the sign, matching whichever AVX2
+// kernel this is standing in for. The choice is arithmetically irrelevant, but
+// keeping it aligned makes the two paths bit-identical even at x = -128.
+VIBEASR_TGT_VNNI static void vae_dot_vnni_shared(
+        const int8_t * shared, const int8_t * const * others,
+        int nbytes, int nblk, int sign_from_shared, int32_t * out) {
+    __m512i acc[VAE_PARALLEL_SIZE];
+    for (int b = 0; b < nblk; b++) acc[b] = _mm512_setzero_si512();
+
+    int i = 0;
+    for (; i + 64 <= nbytes; i += 64) {
+        const __m512i sv = _mm512_loadu_si512((const void *)(shared + i));
+        for (int b = 0; b < nblk; b++) {
+            const __m512i ov = _mm512_loadu_si512((const void *)(others[b] + i));
+            acc[b] = sign_from_shared ? dp_signed(acc[b], sv, ov) : dp_signed(acc[b], ov, sv);
+        }
+    }
+    if (i < nbytes) {
+        const __mmask64 m = (__mmask64)((1ULL << (nbytes - i)) - 1);
+        const __m512i sv = _mm512_maskz_loadu_epi8(m, shared + i);
+        for (int b = 0; b < nblk; b++) {
+            const __m512i ov = _mm512_maskz_loadu_epi8(m, others[b] + i);
+            acc[b] = sign_from_shared ? dp_signed(acc[b], sv, ov) : dp_signed(acc[b], ov, sv);
+        }
+    }
+    for (int b = 0; b < nblk; b++) out[b] = hsum_i32_16(acc[b]);
+}
+#endif  // x86
+
 void ggml_vec_dot_i8_i8_1x1(int n, int32_t * s, size_t bs, const void * vx, size_t bx, const void * vy, size_t by, int nrc) {
+#if defined(VIBEASR_HAS_AVX512_PATH)
+    if (vibeasr_isa() >= VIBEASR_ISA_VNNI) {
+        // The AVX2 kernel consumes whole QK_I8_S blocks and ignores any tail; match it.
+        const int nbytes = (n / QK_I8_S) * QK_I8_S;
+        const int8_t * x = (const int8_t *) vx;
+        const int8_t * y = (const int8_t *) vy;
+        for (int row = 0; row < nrc; row++) {
+            s[row] = vae_dot_vnni(x + row * bx, y, nbytes);
+        }
+        return;
+    }
+#endif
 #if defined(__AVX2__) || defined(__AVX__)
     const int8_t * x = (int8_t *)vx;
     const int8_t * y = (int8_t *)vy;
@@ -171,6 +280,21 @@ void ggml_vec_dot_i8_i8_1x1(int n, int32_t * s, size_t bs, const void * vx, size
 }
 
 void ggml_vec_dot_i8_i8_1xN(int n, int32_t * s, size_t bs, const void * vx, size_t bx, const void * vy, size_t by, int nrc) {
+#if defined(VIBEASR_HAS_AVX512_PATH)
+    if (vibeasr_isa() >= VIBEASR_ISA_VNNI) {
+        const int nbytes = (n / QK_I8_S) * QK_I8_S;
+        const int8_t * x = (const int8_t *) vx;
+        const int8_t * y = (const int8_t *) vy;
+        for (int row = 0; row < nrc; row += VAE_PARALLEL_SIZE) {
+            const int8_t * rows[VAE_PARALLEL_SIZE];
+            int32_t out[VAE_PARALLEL_SIZE];
+            for (int rb = 0; rb < VAE_PARALLEL_SIZE; rb++) rows[rb] = x + (row + rb) * bx;
+            vae_dot_vnni_shared(y, rows, nbytes, VAE_PARALLEL_SIZE, /*sign_from_shared=*/0, out);
+            for (int rb = 0; rb < VAE_PARALLEL_SIZE; rb++) s[row + rb] = out[rb];
+        }
+        return;
+    }
+#endif
 #if defined(__AVX2__) || defined(__AVX__)
     const int8_t * x = (int8_t *)vx;
     const int8_t * y = (int8_t *)vy;
@@ -379,6 +503,21 @@ void ggml_vec_dot_i8_i8_1xN(int n, int32_t * s, size_t bs, const void * vx, size
 }
 
 void ggml_vec_dot_i8_i8_Nx1(int n, int32_t * s, size_t bs, const void * vx, size_t bx, const void * vy, size_t by, int nrc) {
+#if defined(VIBEASR_HAS_AVX512_PATH)
+    if (vibeasr_isa() >= VIBEASR_ISA_VNNI) {
+        const int nbytes = (n / QK_I8_S) * QK_I8_S;
+        const int8_t * x = (const int8_t *) vx;
+        const int8_t * y = (const int8_t *) vy;
+        for (int col = 0; col < nrc; col += VAE_PARALLEL_SIZE) {
+            const int8_t * cols[VAE_PARALLEL_SIZE];
+            int32_t out[VAE_PARALLEL_SIZE];
+            for (int cb = 0; cb < VAE_PARALLEL_SIZE; cb++) cols[cb] = y + (col + cb) * by;
+            vae_dot_vnni_shared(x, cols, nbytes, VAE_PARALLEL_SIZE, /*sign_from_shared=*/1, out);
+            for (int cb = 0; cb < VAE_PARALLEL_SIZE; cb++) s[(col + cb) * bs] = out[cb];
+        }
+        return;
+    }
+#endif
 #if defined(__AVX2__) || defined(__AVX__)
     const int8_t * x = (int8_t *)vx;
     const int8_t * y = (int8_t *)vy;
@@ -569,6 +708,10 @@ void ggml_vec_dot_i8_i8_Nx1(int n, int32_t * s, size_t bs, const void * vx, size
 }
 
 void ggml_vec_dot_i8_i8(int n, int32_t * s, size_t bs, const void * vx, size_t bx, const void * vy, size_t by, int nrc) {
+    VIBEASR_PROBE(nrc % VAE_PARALLEL_SIZE == 0
+                      ? (VAE_ACT_PARALLEL_SELECTED ? VIBEASR_K_I8_Nx1 : VIBEASR_K_I8_1xN)
+                      : VIBEASR_K_I8_1x1,
+                  (uint64_t) n * (uint64_t) nrc);
     if (nrc % VAE_PARALLEL_SIZE == 0) {
 #if defined(VAE_ACT_PARALLEL)
         ggml_vec_dot_i8_i8_Nx1(n, s, bs, vx, bx, vy, by, nrc);
@@ -585,6 +728,7 @@ void ggml_vec_dot_i8_i8_n4_col8(
     const int8_t * vx, size_t bx,
     const int8_t * vy,
     int nrc) {
+    VIBEASR_PROBE(VIBEASR_K_I8_SMALL, (uint64_t) 4 * 8 * (uint64_t) nrc);
     
 #if defined(__AVX2__) || defined(__AVX__)
     const __m256i one16 = _mm256_set1_epi16(1);
@@ -639,6 +783,7 @@ void ggml_vec_dot_i8_i8_n8_col4(
     const int8_t * vx, size_t bx,
     const int8_t * vy,
     int nrc) {
+    VIBEASR_PROBE(VIBEASR_K_I8_SMALL, (uint64_t) 8 * 4 * (uint64_t) nrc);
     
 #if defined(__AVX2__) || defined(__AVX__)
     const __m256i one16 = _mm256_set1_epi16(1);
@@ -695,6 +840,7 @@ void ggml_vec_dot_i8_i8_n16_col2(
     const int8_t * vx, size_t bx,
     const int8_t * vy,
     int nrc) {
+    VIBEASR_PROBE(VIBEASR_K_I8_SMALL, (uint64_t) 16 * 2 * (uint64_t) nrc);
     
 #if defined(__AVX2__) || defined(__AVX__)
     const __m256i one16 = _mm256_set1_epi16(1);
@@ -749,6 +895,7 @@ void ggml_vec_dot_i8_i8_n2_col16(
     const int8_t * vx, size_t bx,
     const int8_t * vy,
     int nrc) {
+    VIBEASR_PROBE(VIBEASR_K_I8_SMALL, (uint64_t) 2 * 16 * (uint64_t) nrc);
 
 #if defined(__AVX2__) || defined(__AVX__)
     for (int row = 0; row < nrc; row++) {
@@ -792,6 +939,7 @@ void ggml_vec_dot_i8_i8_n4_col2(
     const int8_t * vx, size_t bx,
     const int8_t * vy,
     int nrc) {
+    VIBEASR_PROBE(VIBEASR_K_I8_SMALL, (uint64_t) 4 * 2 * (uint64_t) nrc);
 
 #if defined(__ARM_NEON)
     int8x8_t vx_vec = vld1_s8(vx);
@@ -834,6 +982,7 @@ void ggml_vec_dot_i8_i8_n2_col4(
     const int8_t * vx, size_t bx,
     const int8_t * vy,
     int nrc) {
+    VIBEASR_PROBE(VIBEASR_K_I8_SMALL, (uint64_t) 2 * 4 * (uint64_t) nrc);
 
 #if defined(__ARM_NEON)
     int8x8_t vx_vec = vld1_s8(vx);
@@ -875,7 +1024,9 @@ void ggml_vec_dot_i8_i8_batch_n8(
     int64_t ne02,
     int64_t ne10,
     int64_t ne11) {
-    
+
+    VIBEASR_PROBE(VIBEASR_K_I8_BATCH_N8, (uint64_t) ne00 * (uint64_t) ne02 * (uint64_t) ne11);
+
 #if defined(__AVX2__) || defined(__AVX__)
     const __m256i one16 = _mm256_set1_epi16(1);
     

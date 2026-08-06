@@ -100,6 +100,24 @@ set_target_properties(asr_stream_server PROPERTIES
     OUTPUT_NAME asr_stream_server
 )
 
+
+# Kernel correctness + throughput harness (bench/kernel_bench.cpp).
+# Links ggml so it exercises the same kernel objects inference uses.
+add_executable(kernel_bench bench/kernel_bench.cpp)
+
+target_include_directories(kernel_bench PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/llama.cpp/ggml/include
+)
+
+target_link_libraries(kernel_bench PRIVATE ggml ${CMAKE_THREAD_LIBS_INIT})
+target_compile_features(kernel_bench PRIVATE cxx_std_11)
+
+set_target_properties(kernel_bench PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
 # install
 
 include(GNUInstallDirs)
