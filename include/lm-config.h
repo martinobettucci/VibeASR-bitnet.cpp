@@ -8,8 +8,12 @@
     #ifndef ROW_BLOCK_SIZE
         #define ROW_BLOCK_SIZE 4
     #endif
-    #define COL_BLOCK_SIZE 32
-    #define PARALLEL_SIZE 4
+    #ifndef COL_BLOCK_SIZE
+        #define COL_BLOCK_SIZE 32
+    #endif
+    #ifndef PARALLEL_SIZE
+        #define PARALLEL_SIZE 4
+    #endif
 #else
     #define ROW_BLOCK_SIZE 32
     #define COL_BLOCK_SIZE 4

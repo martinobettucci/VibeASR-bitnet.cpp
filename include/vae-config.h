@@ -25,8 +25,14 @@
     #ifndef VAE_ROW_BLOCK_SIZE
         #define VAE_ROW_BLOCK_SIZE 32
     #endif
-    #define VAE_COL_BLOCK_SIZE 16
-    #define VAE_PARALLEL_SIZE 4
+    // Also sweepable via row_block_sweep.sh --macro; both are still at upstream's
+    // values because nothing has measured them yet.
+    #ifndef VAE_COL_BLOCK_SIZE
+        #define VAE_COL_BLOCK_SIZE 16
+    #endif
+    #ifndef VAE_PARALLEL_SIZE
+        #define VAE_PARALLEL_SIZE 4
+    #endif
 #else
     #define VAE_ROW_BLOCK_SIZE 16
     #define VAE_COL_BLOCK_SIZE 4
