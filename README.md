@@ -330,46 +330,35 @@ matrix twice, the second copy at higher precision. llama.cpp loads
 `LLM_TENSOR_OUTPUT` as `TENSOR_NOT_REQUIRED` and falls back to `token_embd`, so it can
 simply be dropped:
 
-| | LM | Total | bits/weight |
-|:--|--:|--:|--:|
-| As released | 992.9 MB | 1.70 GB | 4.44 |
-| `requant_lm_head --drop` | **526.1 MB** | **1.23 GB** | **2.69** |
-
-Published as [P2Enjoy/VibeVoice-ASR-BitNet-slim](https://huggingface.co/P2Enjoy/VibeVoice-ASR-BitNet-slim).
-`llama-quantize` cannot do this — it has no way to leave the I2_S body alone — hence
-`tools/requant_lm_head.cpp`.
+The repacked model — sizes, bit budget, and the measured WER cost of the trade
+(about +0.4 corpus-wide for −47% LM size) — lives at
+**[P2Enjoy/VibeVoice-ASR-BitNet-slim](https://huggingface.co/P2Enjoy/VibeVoice-ASR-BitNet-slim)**;
+its model card is the authoritative source for those numbers and they are not
+repeated here. `llama-quantize` cannot produce it — it has no way to leave the I2_S
+body alone — hence `tools/requant_lm_head.cpp`.
 
 Note the ternary body is packed at exactly **2.000** bits/weight, not log₂3 = 1.585:
 I2_S stores four ternary values per byte and wastes one of four codes, which is 68 MB
 of padding (20.8% of the body). `bench/model_report.py` prints the full budget.
 
-### WER on the languages the model supports
+### WER: measured here, reported there
 
 VibeVoice-ASR was trained on **en, zh, fr, it, ko, pt, vi**. Of the EU official
 languages that means English, French, Italian and Portuguese are in-distribution;
 Spanish and German are not but generalise usably. Others degrade sharply and no
 amount of quantisation or kernel work changes that.
 
-FLEURS, 24 clips per language, greedy, `-t 2`, numbers spelled out on both sides
-(the references write `35 mm` where the model says `trente-cinq millimètres`; without
-that normalisation WER is inflated by 1–2 points).
+The WER methodology lives in this repo — FLEURS slices, corpus-level scoring, number
+spelling on both sides (`bench/README.md` documents the conventions, and
+`bench/run_asr.py` / `bench/summarize.py` regenerate every figure). The resulting
+per-language tables for the released model against the slim repack are published on
+the [model card](https://huggingface.co/P2Enjoy/VibeVoice-ASR-BitNet-slim), not
+duplicated here.
 
-| Language | Released | Slim (`--drop`) | Δ |
-|:--|--:|--:|--:|
-| Spanish | 6.47 | 6.47 | +0.00 |
-| English | 8.23 | 8.58 | +0.34 |
-| Portuguese | 8.90 | 8.57 | −0.33 |
-| Italian | 9.67 | 9.52 | −0.16 |
-| German | 14.63 | 14.98 | +0.35 |
-| French | 34.08 | 35.88 | +1.81 |
-| **corpus** | **14.31** | **14.69** | **+0.38** |
-
-Dropping the F16 head costs about **+0.4 WER corpus-wide for −47% LM size**. Small,
-but not free — the output projection moves from F16 to Q6_K.
-
-FLEURS French is much harder than the MLC-FR set the tech report scores 17.41 on; for
-calibration, FLEURS Italian here (9.67) is *better* than the report's MLC-IT (17.23),
-so the gap is the corpus, not the pipeline.
+One calibration point worth keeping in mind when reading any of them: FLEURS French
+is much harder than the MLC-FR set the tech report scores 17.41 on — FLEURS Italian
+scores *better* here than the report's MLC-IT — so cross-corpus comparisons mislead;
+the gap is the corpus, not the pipeline.
 
 ### Known issue: output depends on thread count
 
