@@ -276,6 +276,12 @@ struct AudioVAEEncoder {
     // Optional recorder for last-stage block outputs (block-truncation study).
     std::vector<struct ggml_tensor*>* tap_blocks = nullptr;
 
+    // Stage-6 truncation: run trunc_keep blocks of the last stage, then one affine
+    // map standing in for the rest. Zero means run the stage as trained.
+    int trunc_keep = 0;
+    struct ggml_tensor* trunc_w = nullptr;   // I8_S [dim, dim]
+    struct ggml_tensor* trunc_b = nullptr;   // F32  [dim]
+
     struct ggml_tensor* forward(
         struct ggml_context* ctx,
         struct ggml_tensor* x) {
@@ -287,16 +293,27 @@ struct AudioVAEEncoder {
                                  downsamples[i].conv_bias,
                                  downsample_strides[i], downsample_kernel_sizes[i]-downsample_strides[i], 1);
             
-            for (int j = 0; j < stage_depths[i]; j++) {
+            const bool last_stage = (i == n_stages - 1);
+            const int depth = (last_stage && trunc_keep > 0 && trunc_keep < stage_depths[i])
+                              ? trunc_keep : stage_depths[i];
+
+            for (int j = 0; j < depth; j++) {
                 x = stages[i][j].forward(ctx, x);
                 // Tap for the block-truncation study (see bench/stage6_calib.py). The
                 // last stage holds 52% of encoder MACs and 89% of its FFN parameters,
                 // so its per-block outputs are what a truncate-and-project scheme has
                 // to reproduce. Recording pointers is free; nothing is read unless
                 // VIBEASR_TAP_STAGE is set.
-                if (tap_blocks && i == n_stages - 1) {
+                if (tap_blocks && last_stage) {
                     tap_blocks->push_back(x);
                 }
+            }
+
+            // The blocks we skipped, as one affine map. x is [dim, frames] here, the
+            // same layout the FFN linears take, so this rides the existing fused
+            // I8_S kernel and keeps activations int8 end to end.
+            if (last_stage && depth < stage_depths[i] && trunc_w) {
+                x = ggml_nn_linear(ctx, x, trunc_w, trunc_b);
             }
 
             x = ggml_cont(ctx, ggml_permute(ctx, x, 1, 0, 2, 3));
@@ -326,6 +343,9 @@ const int AudioVAEEncoder::stage_depths[n_stages] = {3, 3, 3, 3, 3, 3, 8};
 
 struct vae_model {
     struct ggml_context* params_ctx = nullptr;
+    // Own context for the stage-6 projections: params_ctx is sized exactly for the
+    // GGUF's tensors, so borrowing space there overruns it.
+    struct ggml_context* proj_ctx = nullptr;
     ggml_backend_t backend = nullptr;
     ggml_backend_buffer_t params_buffer = nullptr;
     
@@ -338,6 +358,10 @@ struct vae_model {
     std::map<std::string, struct ggml_tensor*> tensors;
     
     ~vae_model() {
+        if (proj_ctx) {
+            ggml_free(proj_ctx);
+            proj_ctx = nullptr;
+        }
         if (params_buffer) {
             ggml_backend_buffer_free(params_buffer);
         }
@@ -517,6 +541,74 @@ struct vae_context_params vae_context_default_params() {
     return params;
 }
 
+// Load the stage-6 truncation projections written by bench/stage6_fit.py.
+//
+// The last encoder stage is 8 ConvNeXt blocks at dim 2048 -- 52% of encoder MACs and
+// 89% of its FFN parameters. bench/stage6_calib.py shows block K's output linearly
+// predicts block 8's at cosine 0.89-0.96, so the skipped blocks collapse into one
+// affine map. Weights arrive already in I8_S layout so the projection runs on the
+// same fused kernel as the FFN linears it stands in for.
+//
+// Enabled by VIBEASR_STAGE6_PROJ=<file>. Absent, the encoder runs as trained.
+static bool load_stage6_proj(vae_model* model, const char* path) {
+    FILE* f = fopen(path, "rb");
+    if (!f) {
+        fprintf(stderr, "[VAE] stage6: cannot open %s\n", path);
+        return false;
+    }
+    char magic[4];
+    int32_t keep = 0, dim = 0;
+    if (fread(magic, 1, 4, f) != 4 || memcmp(magic, "V6PJ", 4) != 0 ||
+        fread(&keep, sizeof(int32_t), 1, f) != 1 ||
+        fread(&dim, sizeof(int32_t), 1, f) != 1) {
+        fprintf(stderr, "[VAE] stage6: bad header in %s\n", path);
+        fclose(f);
+        return false;
+    }
+
+    // int8 matrix + appended scale + float bias, per encoder, plus tensor overhead.
+    const size_t need = 2 * ((size_t) dim * dim + 32 + (size_t) dim * sizeof(float))
+                        + 8 * ggml_tensor_overhead() + (1u << 20);
+    struct ggml_init_params pp = { /*.mem_size =*/ need, /*.mem_buffer =*/ NULL,
+                                   /*.no_alloc =*/ false };
+    model->proj_ctx = ggml_init(pp);
+    if (!model->proj_ctx) {
+        fprintf(stderr, "[VAE] stage6: cannot allocate projection context\n");
+        fclose(f);
+        return false;
+    }
+
+    AudioVAEEncoder* encs[2] = { &model->acoustic_encoder, &model->semantic_encoder };
+    const char* names[2] = { "acoustic", "semantic" };
+    for (int e = 0; e < 2; e++) {
+        // I8_S is int8 data with the dequant scale appended, so allocate via ggml and
+        // fill both parts exactly as the quantiser lays them out.
+        struct ggml_tensor* w = ggml_new_tensor_2d(model->proj_ctx, GGML_TYPE_I8_S, dim, dim);
+        struct ggml_tensor* b = ggml_new_tensor_1d(model->proj_ctx, GGML_TYPE_F32, dim);
+        std::vector<int8_t> qbuf((size_t) dim * dim);
+        float scale = 0.0f;
+        std::vector<float> bbuf(dim);
+        if (fread(qbuf.data(), 1, qbuf.size(), f) != qbuf.size() ||
+            fread(&scale, sizeof(float), 1, f) != 1 ||
+            fread(bbuf.data(), sizeof(float), dim, f) != (size_t) dim) {
+            fprintf(stderr, "[VAE] stage6: truncated %s section\n", names[e]);
+            fclose(f);
+            return false;
+        }
+        memcpy(w->data, qbuf.data(), qbuf.size());
+        memcpy((char*) w->data + qbuf.size(), &scale, sizeof(float));
+        memcpy(b->data, bbuf.data(), dim * sizeof(float));
+
+        encs[e]->trunc_keep = keep;
+        encs[e]->trunc_w = w;
+        encs[e]->trunc_b = b;
+    }
+    fclose(f);
+    fprintf(stderr, "[VAE] stage6: keeping %d/%d blocks + projection (%s)\n",
+            keep, AudioVAEEncoder::stage_depths[AudioVAEEncoder::n_stages - 1], path);
+    return true;
+}
+
 vae_model_t* vae_load_model_from_file(
     const char* model_path,
     struct vae_model_params params) {
@@ -598,6 +690,13 @@ vae_model_t* vae_load_model_from_file(
         return nullptr;
     }
     
+    if (const char* proj = getenv("VIBEASR_STAGE6_PROJ")) {
+        if (!load_stage6_proj(model, proj)) {
+            delete model;
+            return nullptr;
+        }
+    }
+
     model->acoustic_dim = model->acoustic_encoder.connector_output_dim;
     model->semantic_dim = model->semantic_encoder.connector_output_dim;
     

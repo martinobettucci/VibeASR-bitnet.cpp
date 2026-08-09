@@ -77,19 +77,17 @@ def main():
 
     # Hold out whole passes, not frames: frames within a clip are highly correlated
     # and a frame-level split would report a number the deployment never sees.
-    cut = int(len(passes) * 0.8)
-    train, test = passes[:cut], passes[cut:]
-    print("fit on %d passes, score on %d held out\n" % (len(train), len(test)))
-
-    Ytr = np.concatenate([p[nb - 1] for p in train]).astype(np.float64)
-    Yte = np.concatenate([p[nb - 1] for p in test]).astype(np.float64)
-
     # The two encoders (acoustic, semantic) have different weights and interleave in
     # the dump. They must be calibrated separately -- one matrix serving both is not
     # what deployment would use, and pooling them understates what is achievable.
     for name, sel in (("acoustic", 0), ("semantic", 1)):
-        tr = [p for i, p in enumerate(train) if i % 2 == sel]
-        te = [p for i, p in enumerate(test) if i % 2 == sel]
+        # Select on the GLOBAL pass index. Slicing first and enumerating the slice
+        # restarts the counter at 0, so an odd cut silently swaps the two encoders
+        # and scores each against the other's targets.
+        own = [i for i in range(len(passes)) if i % 2 == sel]
+        ocut = int(len(own) * 0.8)
+        tr = [passes[i] for i in own[:ocut]]
+        te = [passes[i] for i in own[ocut:]]
         if not tr or not te:
             continue
         Ytr = np.concatenate([p[nb - 1] for p in tr]).astype(np.float64)
