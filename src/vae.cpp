@@ -276,6 +276,8 @@ struct AudioVAEEncoder {
     // Optional recorder for last-stage block outputs (block-truncation study).
     std::vector<struct ggml_tensor*>* tap_blocks = nullptr;
 
+    const char* tag = "enc";   // set to "acoustic"/"semantic" at load for the profiler
+
     // Stage-6 truncation: run trunc_keep blocks of the last stage, then one affine
     // map standing in for the rest. Zero means run the stage as trained.
     int trunc_keep = 0;
@@ -286,12 +288,19 @@ struct AudioVAEEncoder {
         struct ggml_context* ctx,
         struct ggml_tensor* x) {
         
+        // Section markers for the ggml node profiler (VIBEASR_NODE_PROFILE=1). Naming
+        // the tensor that ends each section lets the profiler attribute every node
+        // between markers to it. Free when profiling is off.
+        char mark[64];
+
         // Downsamples and stages
         for (int i = 0; i < n_stages; i++) {
 
             x = ggml_nn_conv_1d(ctx, x, downsamples[i].conv_weight,
                                  downsamples[i].conv_bias,
                                  downsample_strides[i], downsample_kernel_sizes[i]-downsample_strides[i], 1);
+            snprintf(mark, sizeof(mark), "MARK:%s.down%d", tag, i);
+            ggml_set_name(x, mark);
             
             const bool last_stage = (i == n_stages - 1);
             const int depth = (last_stage && trunc_keep > 0 && trunc_keep < stage_depths[i])
@@ -317,16 +326,22 @@ struct AudioVAEEncoder {
             }
 
             x = ggml_cont(ctx, ggml_permute(ctx, x, 1, 0, 2, 3));
+            snprintf(mark, sizeof(mark), "MARK:%s.stage%d", tag, i);
+            ggml_set_name(x, mark);
 
         }
         
         // Head
         x = ggml_nn_conv_1d(ctx, x, head_conv_weight, head_conv_bias, 1, 8-1, 1);
+        snprintf(mark, sizeof(mark), "MARK:%s.head", tag);
+        ggml_set_name(x, mark);
         
         // Connector: fc1 -> norm -> fc2
         x = ggml_nn_linear(ctx, x, connector_fc1_weight, connector_fc1_bias);
         x = ggml_nn_rms_norm(ctx, x, connector_norm_weight);
         x = ggml_nn_linear(ctx, x, connector_fc2_weight, connector_fc2_bias);
+        snprintf(mark, sizeof(mark), "MARK:%s.connector", tag);
+        ggml_set_name(x, mark);
 
         return x;
     }
@@ -680,6 +695,8 @@ vae_model_t* vae_load_model_from_file(
     gguf_free(gguf_ctx);
     
     // Load encoder weights
+    model->acoustic_encoder.tag = "acoustic";
+    model->semantic_encoder.tag = "semantic";
     if (!load_encoder_weights(model, model->acoustic_encoder, "acoustic")) {
         delete model;
         return nullptr;

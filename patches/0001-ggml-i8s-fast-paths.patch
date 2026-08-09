@@ -59,7 +59,7 @@ index 99f43c6..f03d62d 100644
  
  void ggml_gemm_q4_0_4x4_q8_0(int n, float * restrict s, size_t bs, const void * restrict vx, const void * restrict vy, int nr, int nc) {
 diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c
-index 23303be..454c7f6 100644
+index 23303be..aaca825 100644
 --- a/ggml/src/ggml.c
 +++ b/ggml/src/ggml.c
 @@ -19094,12 +19094,11 @@ static void ggml_compute_forward_mul_mat_add(
@@ -206,3 +206,98 @@ index 23303be..454c7f6 100644
          }
  
          if (ith == 0) {
+@@ -22114,6 +22098,61 @@ struct ggml_cplan ggml_graph_plan(
+     return cplan;
+ }
+ 
++// ---------------------------------------------------------------------------
++// Per-node graph profiler (VIBEASR_NODE_PROFILE=1).
++//
++// Every node is followed by a barrier, so thread 0 can time each one including the
++// wait for stragglers -- which is the number that matters, since that is what the
++// wall clock pays. Two views are accumulated: by section, delimited by tensors named
++// "MARK:<name>" that the caller plants at boundaries, and by ggml op, which is what
++// says whether time goes to arithmetic or to data movement.
++//
++// Off by default; the timing itself costs two clock reads per node.
++// ---------------------------------------------------------------------------
++#define VIBEASR_PROF_SLOTS 96
++struct vibeasr_prof_row { char key[64]; int64_t us; int64_t calls; };
++static struct vibeasr_prof_row vibeasr_prof_sec[VIBEASR_PROF_SLOTS];
++static struct vibeasr_prof_row vibeasr_prof_op[VIBEASR_PROF_SLOTS];
++static int vibeasr_prof_on = -1;
++static int64_t vibeasr_prof_pending = 0;
++static char vibeasr_prof_cur[64] = "(before first mark)";
++
++static void vibeasr_prof_add(struct vibeasr_prof_row * tab, const char * key, int64_t us) {
++    for (int i = 0; i < VIBEASR_PROF_SLOTS; i++) {
++        if (tab[i].key[0] == 0) {
++            snprintf(tab[i].key, sizeof(tab[i].key), "%s", key);
++            tab[i].us = us; tab[i].calls = 1; return;
++        }
++        if (strcmp(tab[i].key, key) == 0) { tab[i].us += us; tab[i].calls++; return; }
++    }
++}
++
++static void vibeasr_prof_dump_tab(const char * title, struct vibeasr_prof_row * tab) {
++    int64_t tot = 0;
++    for (int i = 0; i < VIBEASR_PROF_SLOTS && tab[i].key[0]; i++) tot += tab[i].us;
++    if (!tot) return;
++    fprintf(stderr, "\n%s  (thread-0 wall, includes barrier waits)\n", title);
++    fprintf(stderr, "  %-30s %10s %8s %10s\n", "key", "ms", "share", "nodes");
++    for (int pass = 0; pass < VIBEASR_PROF_SLOTS; pass++) {
++        int best = -1;
++        for (int i = 0; i < VIBEASR_PROF_SLOTS && tab[i].key[0]; i++) {
++            if (tab[i].calls < 0) continue;
++            if (best < 0 || tab[i].us > tab[best].us) best = i;
++        }
++        if (best < 0) break;
++        fprintf(stderr, "  %-30s %10.1f %7.1f%% %10lld\n", tab[best].key,
++                tab[best].us / 1000.0, 100.0 * tab[best].us / tot,
++                (long long) tab[best].calls);
++        tab[best].calls = -1;
++    }
++    fprintf(stderr, "  %-30s %10.1f\n", "TOTAL", tot / 1000.0);
++}
++
++static void vibeasr_prof_dump(void) {
++    vibeasr_prof_dump_tab("[vibeasr] time by section", vibeasr_prof_sec);
++    vibeasr_prof_dump_tab("[vibeasr] time by ggml op", vibeasr_prof_op);
++}
++
+ static thread_ret_t ggml_graph_compute_thread(void * data) {
+     struct ggml_compute_state * state = (struct ggml_compute_state *) data;
+     struct ggml_threadpool    * tp    = state->threadpool;
+@@ -22134,6 +22173,14 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
+     for (int node_n = 0; node_n < cgraph->n_nodes && !tp->abort; node_n++) {
+         struct ggml_tensor * node = cgraph->nodes[node_n];
+ 
++        if (vibeasr_prof_on < 0 && state->ith == 0) {
++            const char * e = getenv("VIBEASR_NODE_PROFILE");
++            vibeasr_prof_on = (e && *e && strcmp(e, "0")) ? 1 : 0;
++            if (vibeasr_prof_on) atexit(vibeasr_prof_dump);
++        }
++        const int64_t vibeasr_t0 =
++            (vibeasr_prof_on == 1 && state->ith == 0) ? ggml_time_us() : 0;
++
+         ggml_compute_forward(&params, node);
+ 
+         if (state->ith == 0 && cplan->abort_callback &&
+@@ -22143,6 +22190,17 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
+         }
+ 
+         ggml_barrier(state->threadpool);
++
++        if (vibeasr_prof_on == 1 && state->ith == 0) {
++            const int64_t dt = ggml_time_us() - vibeasr_t0;
++            vibeasr_prof_add(vibeasr_prof_op, ggml_op_name(node->op), dt);
++            vibeasr_prof_pending += dt;
++            if (strncmp(node->name, "MARK:", 5) == 0) {
++                vibeasr_prof_add(vibeasr_prof_sec, node->name + 5, vibeasr_prof_pending);
++                vibeasr_prof_pending = 0;
++                snprintf(vibeasr_prof_cur, sizeof(vibeasr_prof_cur), "%s", node->name + 5);
++            }
++        }
+     }
+ 
+     return 0;
