@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <map>
 #include <string>
 #include <vector>
@@ -271,7 +272,10 @@ struct AudioVAEEncoder {
     struct ggml_tensor* connector_norm_weight;
     struct ggml_tensor* connector_fc2_weight;
     struct ggml_tensor* connector_fc2_bias;
-    
+
+    // Optional recorder for last-stage block outputs (block-truncation study).
+    std::vector<struct ggml_tensor*>* tap_blocks = nullptr;
+
     struct ggml_tensor* forward(
         struct ggml_context* ctx,
         struct ggml_tensor* x) {
@@ -285,6 +289,14 @@ struct AudioVAEEncoder {
             
             for (int j = 0; j < stage_depths[i]; j++) {
                 x = stages[i][j].forward(ctx, x);
+                // Tap for the block-truncation study (see bench/stage6_calib.py). The
+                // last stage holds 52% of encoder MACs and 89% of its FFN parameters,
+                // so its per-block outputs are what a truncate-and-project scheme has
+                // to reproduce. Recording pointers is free; nothing is read unless
+                // VIBEASR_TAP_STAGE is set.
+                if (tap_blocks && i == n_stages - 1) {
+                    tap_blocks->push_back(x);
+                }
             }
 
             x = ggml_cont(ctx, ggml_permute(ctx, x, 1, 0, 2, 3));
@@ -708,6 +720,13 @@ static int32_t vae_encode_impl(
         memcpy(input->data, audio, n_samples * sizeof(float));
     }
     
+    // Block-truncation study: record last-stage block outputs when asked.
+    // See bench/stage6_calib.py -- the last stage is 52% of encoder MACs and 89% of
+    // its FFN parameters, so it is the only place worth truncating.
+    std::vector<struct ggml_tensor*> tap_blocks;
+    const char * tap_env = getenv("VIBEASR_TAP_STAGE");
+    encoder.tap_blocks = tap_env ? &tap_blocks : nullptr;
+
     // Build computation graph
     struct ggml_tensor* result = encoder.forward(ctx->compute_ctx, input);
     
@@ -722,6 +741,31 @@ static int32_t vae_encode_impl(
         return -1;
     }
     
+    // Dump the tapped block outputs (dequantised) for offline calibration.
+    if (tap_env && !tap_blocks.empty()) {
+        FILE * f = fopen(tap_env, "ab");
+        if (f) {
+            for (size_t b = 0; b < tap_blocks.size(); b++) {
+                struct ggml_tensor * t = tap_blocks[b];
+                const int64_t n = ggml_nelements(t);
+                std::vector<float> buf(n);
+                if (t->type == GGML_TYPE_I8_S) {
+                    const int8_t * q = (const int8_t *) t->data;
+                    const float sc = *(const float *)((const char *) t->data + n);
+                    const float inv = sc != 0.0f ? 1.0f / sc : 0.0f;
+                    for (int64_t i = 0; i < n; i++) buf[i] = (float) q[i] * inv;
+                } else {
+                    memcpy(buf.data(), t->data, n * sizeof(float));
+                }
+                // record: block index, dim, frames, then the values
+                const int32_t hdr[3] = { (int32_t) b, (int32_t) t->ne[0], (int32_t)(n / t->ne[0]) };
+                fwrite(hdr, sizeof(hdr), 1, f);
+                fwrite(buf.data(), sizeof(float), n, f);
+            }
+            fclose(f);
+        }
+    }
+
     // Get output dimensions
     int64_t batch = result->ne[2];
     int64_t n_frames = result->ne[1];
