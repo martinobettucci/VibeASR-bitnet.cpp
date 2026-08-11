@@ -14,6 +14,7 @@
 
 #include "../utils/audio_io.h"
 #include "../utils/prompt_builder.h"
+#include "../utils/hotword_boost.h"
 
 #include "time_compat.h"
 
@@ -35,6 +36,8 @@ struct asr_params {
     std::string lm_model_path;
     std::string audio_path;
     std::string context_info;      // Hotwords/context info for improved recognition
+    std::string hotwords;          // Comma-separated terms for decoder-level biasing
+    float hotword_boost = 2.5f;    // Logit bonus per matched-continuation token
     std::string prompt_format = "text";  // "text" for plain text, "json" for JSON with keys
 
     int n_threads       = 4;
@@ -56,6 +59,8 @@ static void print_usage(const char * prog) {
     fprintf(stderr, "  --vae-model <path>   Path to VAE encoder GGUF model (required)\n");
     fprintf(stderr, "  --lm-model <path>    Path to LM GGUF model (required)\n");
     fprintf(stderr, "  --audio <path>       Path to input WAV file (required)\n");
+    fprintf(stderr, "  --hotwords <a,b,c>   Bias decoding toward these terms (trie logit boost)\n");
+    fprintf(stderr, "  --hotword-boost <f>  Logit bonus per matched token (default 2.5)\n");
     fprintf(stderr, "  -t <n>               Number of threads (default: 4)\n");
     fprintf(stderr, "  -c <n>               Context size (default: 16384)\n");
     fprintf(stderr, "  -b <n>               Batch size (default: 2048)\n");
@@ -104,6 +109,10 @@ static bool parse_args(int argc, char ** argv, asr_params & params) {
             params.compress_ratio = std::stoi(argv[++i]);
         } else if (arg == "--context" && i + 1 < argc) {
             params.context_info = argv[++i];
+        } else if (arg == "--hotwords" && i + 1 < argc) {
+            params.hotwords = argv[++i];
+        } else if (arg == "--hotword-boost" && i + 1 < argc) {
+            params.hotword_boost = std::stof(argv[++i]);
         } else if (arg == "--prompt-format" && i + 1 < argc) {
             params.prompt_format = argv[++i];
         } else if (arg == "--no-normalize") {
@@ -370,13 +379,25 @@ int main(int argc, char ** argv) {
             llama_sampler_chain_add(smpl, llama_sampler_init_dist(42));
         }
 
+        // Decoder-level hotword biasing (utils/hotword_boost.h). Applied to the raw
+        // logits immediately before each sample; a no-op when --hotwords is absent.
+        hotword::Trie hw_trie;
+        hotword::State hw_state;
+        if (!params.hotwords.empty()) {
+            hw_trie = hotword::build(lm_model, params.hotwords, params.hotword_boost);
+            fprintf(stderr, "  Hotword trie: %zu nodes, boost %.2f\n",
+                    hw_trie.children.size(), params.hotword_boost);
+        }
+
         std::vector<llama_token> generated_tokens;
         int cur_pos = n_prompt_tokens;
         int n_decoded = 0;
 
         // Sample first token from prefill logits
+        hw_state.boost(hw_trie, llama_get_logits_ith(lm_ctx, -1));
         llama_token new_token = llama_sampler_sample(smpl, lm_ctx, -1);
         llama_sampler_accept(smpl, new_token);
+        hw_state.advance(hw_trie, new_token);
 
         generated_tokens.push_back(new_token);
         n_decoded++;
@@ -400,8 +421,10 @@ int main(int argc, char ** argv) {
             }
 
             cur_pos++;
+            hw_state.boost(hw_trie, llama_get_logits_ith(lm_ctx, -1));
             new_token = llama_sampler_sample(smpl, lm_ctx, -1);
             llama_sampler_accept(smpl, new_token);
+            hw_state.advance(hw_trie, new_token);
             generated_tokens.push_back(new_token);
             n_decoded++;
         }
