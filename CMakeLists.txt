@@ -41,6 +41,19 @@ find_package(Threads REQUIRED)
 set(GGML_METAL OFF CACHE BOOL "" FORCE)
 set(GGML_BLAS  OFF CACHE BOOL "" FORCE)
 
+# Portable binary, not -march=native. ggml's GGML_NATIVE default bakes the build
+# host's full ISA into every translation unit -- measured consequence: a cloud VM
+# migrated to a host without AVX512-FP16 mid-session and the binary died with SIGILL
+# inside ggml_init's F16 table setup. The VibeASR kernels do not need native codegen:
+# they carry their own AVX-512/VNNI paths behind target attributes with runtime
+# dispatch, so a baseline-AVX2 build still runs the wide kernels on capable hosts
+# and falls back cleanly on others. Override with -DGGML_NATIVE=ON for a
+# single-machine build if you accept the portability loss.
+set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+set(GGML_AVX2   ON  CACHE BOOL "" FORCE)
+set(GGML_FMA    ON  CACHE BOOL "" FORCE)
+set(GGML_F16C   ON  CACHE BOOL "" FORCE)
+
 add_subdirectory(src)
 add_subdirectory(3rdparty/llama.cpp)
 

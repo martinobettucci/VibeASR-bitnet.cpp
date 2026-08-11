@@ -1,0 +1,144 @@
+{
+ "meta": {
+  "tag": "eu_rel_det",
+  "threads": 2,
+  "isa": "auto",
+  "vae": "models/vibeasr/vibeasr-vae-encoder-i8_s.gguf",
+  "lm": "models/vibeasr/vibeasr-lm-i2_s-embed-q6_k.gguf",
+  "clips_per_lang": 24
+ },
+ "summary": {
+  "lang": "pt_br",
+  "name": "Portuguese",
+  "clips": 0,
+  "failed": 24,
+  "audio_sec": 0.0,
+  "ref_words": 0,
+  "wer": NaN,
+  "cer": NaN,
+  "rtf": NaN,
+  "rtf_all": NaN
+ },
+ "records": [
+  {
+   "lang": "pt_br",
+   "wav": "0000.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0000.wav (10.68s, 256320 samples @ 24000 Hz)\n  Audio loaded: 10.68s duration, 256320 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0001.wav",
+   "error": "    2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0001.wav (9.24s, 221760 samples @ 24000 Hz)\n  Audio loaded: 9.24s duration, 221760 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0002.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0002.wav (12.48s, 299520 samples @ 24000 Hz)\n  Audio loaded: 12.48s duration, 299520 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0003.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0003.wav (10.86s, 260640 samples @ 24000 Hz)\n  Audio loaded: 10.86s duration, 260640 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0004.wav",
+   "error": "    2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0004.wav (9.12s, 218880 samples @ 24000 Hz)\n  Audio loaded: 9.12s duration, 218880 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0005.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0005.wav (20.28s, 486720 samples @ 24000 Hz)\n  Audio loaded: 20.28s duration, 486720 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0006.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0006.wav (14.46s, 347040 samples @ 24000 Hz)\n  Audio loaded: 14.46s duration, 347040 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0007.wav",
+   "error": "    2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0007.wav (8.52s, 204480 samples @ 24000 Hz)\n  Audio loaded: 8.52s duration, 204480 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0008.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0008.wav (20.10s, 482400 samples @ 24000 Hz)\n  Audio loaded: 20.10s duration, 482400 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0009.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0009.wav (11.40s, 273600 samples @ 24000 Hz)\n  Audio loaded: 11.40s duration, 273600 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0010.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0010.wav (16.56s, 397440 samples @ 24000 Hz)\n  Audio loaded: 16.56s duration, 397440 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0011.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0011.wav (10.86s, 260640 samples @ 24000 Hz)\n  Audio loaded: 10.86s duration, 260640 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0012.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0012.wav (11.28s, 270720 samples @ 24000 Hz)\n  Audio loaded: 11.28s duration, 270720 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0013.wav",
+   "error": "    2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0013.wav (6.48s, 155520 samples @ 24000 Hz)\n  Audio loaded: 6.48s duration, 155520 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0014.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0014.wav (20.52s, 492480 samples @ 24000 Hz)\n  Audio loaded: 20.52s duration, 492480 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0015.wav",
+   "error": "    2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0015.wav (9.24s, 221760 samples @ 24000 Hz)\n  Audio loaded: 9.24s duration, 221760 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0016.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0016.wav (12.84s, 308160 samples @ 24000 Hz)\n  Audio loaded: 12.84s duration, 308160 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0017.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0017.wav (14.40s, 345600 samples @ 24000 Hz)\n  Audio loaded: 14.40s duration, 345600 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0018.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0018.wav (12.96s, 311040 samples @ 24000 Hz)\n  Audio loaded: 12.96s duration, 311040 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0019.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0019.wav (14.04s, 336960 samples @ 24000 Hz)\n  Audio loaded: 14.04s duration, 336960 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0020.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0020.wav (13.62s, 326880 samples @ 24000 Hz)\n  Audio loaded: 13.62s duration, 326880 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0021.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0021.wav (12.96s, 311040 samples @ 24000 Hz)\n  Audio loaded: 12.96s duration, 311040 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0022.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0022.wav (12.00s, 288000 samples @ 24000 Hz)\n  Audio loaded: 12.00s duration, 288000 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0023.wav",
+   "error": "  2\n  Context:    16384\n  Max tokens: 16384\n  Decoding:   greedy\n\n[Step 1] Loading audio...\n[audio_io] Resampling from 16000 Hz to 24000 Hz\n[audio_io] Loaded: /home/user/VibeASR-bitnet.cpp/bench/data/pt_br/0023.wav (20.94s, 502560 samples @ 24000 Hz)\n  Audio loaded: 20.94s duration, 502560 samples\n\n[Step 2] Loading VAE model...\n[VAE] Loading model from models/vibeasr/vibeasr-vae-encoder-i8_s.gguf\n"
+  }
+ ]
+}
