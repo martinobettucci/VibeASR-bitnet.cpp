@@ -68,6 +68,12 @@ Gradio demo: `python demo/gradio_asr_demo.py --port 7860 --vae-model ... --lm-mo
 | | file | size |
 |:--|:--|--:|
 | LM (ternary I2_S + tied Q6_K embedding) | `vibeasr-lm-i2_s-tied.gguf` | 526 MB |
+
+> The Qwen2.5-**1.5B** backbone is upstream's choice (they distilled down from 7B);
+> this fork does not swap or retrain it. The only weight change here is dropping the
+> LM's duplicated F16 output projection — the ternary body is byte-for-byte
+> Microsoft's. Backbone swaps to smaller Qwens were investigated and rejected with
+> measurements (see the negative-results section).
 | VAE encoders (INT8) | `vibeasr-vae-encoder-i8_s.gguf` | 703 MB |
 
 Hosted at [P2Enjoy/VibeVoice-ASR-BitNet-slim](https://huggingface.co/P2Enjoy/VibeVoice-ASR-BitNet-slim)
