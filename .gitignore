@@ -56,5 +56,4 @@ stats/
 data/
 # Benchmark working files (fetched audio + raw per-clip results)
 bench/data/
-bench/results/*.json
-!bench/results/*.summary.json
+bench/results/
