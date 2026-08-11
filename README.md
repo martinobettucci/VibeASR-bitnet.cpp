@@ -1,206 +1,84 @@
-<h1 align="center">VibeASR.cpp</h1>
+<h1 align="center">VibeASR.cpp — CPU-optimised fork</h1>
 
 <p align="center">
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-  <a href="https://huggingface.co/microsoft/VibeVoice-ASR-BitNet"><img src="https://img.shields.io/badge/🤗-Models-orange.svg" alt="HuggingFace"></a>
-  <a href="https://huggingface.co/spaces/microsoft/vibevoice-asr-bitnet-demo"><img src="https://img.shields.io/badge/✨-Demo-green.svg" alt="Demo"></a>
-  <a href="https://arxiv.org/abs/2607.21075"><img src="https://img.shields.io/badge/📄-Tech_Report-red.svg" alt="Tech Report"></a>
+  <a href="https://huggingface.co/P2Enjoy/VibeVoice-ASR-BitNet-slim"><img src="https://img.shields.io/badge/🤗-Slim_weights-orange.svg" alt="Slim weights"></a>
+  <a href="https://github.com/microsoft/VibeASR.cpp"><img src="https://img.shields.io/badge/upstream-microsoft%2FVibeASR.cpp-lightgrey.svg" alt="Upstream"></a>
 </p>
 
 ---
 
-**VibeASR.cpp** is the official inference runtime for **VibeVoice-ASR-BitNet** — enabling real-time multilingual speech recognition on CPU through heterogeneous quantization (I8\_S for VAE + I2\_S for LM).
-
-To enable efficient edge CPU deployment, we replace the original Qwen2.5-7B language model with Qwen2.5-1.5B, achieving only modest accuracy degradation (1–4% absolute WER increase) while reducing the total model size from 4.62 GB to 1.58 GB. Combined with custom SIMD kernels and operator fusion in the ggml framework, VibeVoice-ASR-BitNet achieves **1.6–2.3× faster** inference than Whisper.cpp at comparable model sizes, with real-time capability (RTF < 1) on low-resource CPUs.
-
-<p align="center">
-  <img src="media/report_overview.png" width="92%"/>
-</p>
+This is a fork of [microsoft/VibeASR.cpp](https://github.com/microsoft/VibeASR.cpp)
+focused on one question: **how fast and how small can VibeVoice-ASR-BitNet get on a
+plain x86 CPU without losing accuracy?** Everything documented here is about the
+fork; for the original project, its paper numbers and its documentation, see the
+[upstream README](https://github.com/microsoft/VibeASR.cpp#readme).
 
 <p align="center">
-  📄 <a href="https://arxiv.org/abs/2607.21075">Tech Report</a> &nbsp;|&nbsp;
-  🤗 <a href="https://huggingface.co/microsoft/VibeVoice-ASR-BitNet">Models</a> &nbsp;|&nbsp;
-  ✨ <a href="https://huggingface.co/spaces/microsoft/vibevoice-asr-bitnet-demo">Demo</a> &nbsp;|&nbsp;
-  🏠 <a href="https://aka.ms/GeneralAI">GeneralAI</a>
-  
+  <img src="media/fork_overview.png" width="92%" alt="Fork architecture: dual INT8 VAE encoders into a ternary Qwen2.5-1.5B with tied Q6_K embedding; the 467 MB F16 output head is removed"/>
 </p>
 
----
+What the fork changes, all measured (see the results section below and the
+[model card](https://huggingface.co/P2Enjoy/VibeVoice-ASR-BitNet-slim)):
 
-## Key Results
-
-### Model Size
-
-<div align="center">
-
-| Component | VibeVoice-ASR-1.5B (FP16) | VibeVoice-ASR-BitNet | Compression |
-|:---------:|:-------------------------:|:--------------------:|:-----------:|
-| VAE Tokenizer | 1.31 GB | 0.65 GB | 2.0× |
-| LM Decoder | 3.32 GB | 0.92 GB | 3.6× |
-| **Total** | **4.62 GB** | **1.58 GB** | **2.9×** |
-
-</div>
-
-### Inference Performance
-
-<div align="center">
-
-**AMD EPYC 7V13 (AVX2+FMA, 24C, 216GB)**
-
-| | 1T | 2T | 3T | 4T | 6T | 8T |
-|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| RTF | 1.98 | 1.08 | **0.77** | **0.63** | **0.49** | **0.42** |
-| vs. Whisper.cpp | 2.28× | 2.12× | 1.86× | 1.86× | 1.71× | 1.55× |
-
-**Apple M4 (ARM NEON, 4P+6E, 16GB)**
-
-| | 1T | 2T | 3T | 4T | 6T | 8T |
-|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| RTF | 1.18 | **0.68** | **0.52** | **0.43** | **0.48** | **0.42** |
-
-**Intel Core i7-13700 (AVX2+FMA, 8P+8E, 32GB, Windows 11 / MinGW GCC)**
-
-| | 1T | 2T | 3T | 4T | 6T | 8T |
-|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| RTF | 1.55 | **0.97** | **0.78** | **0.71** | **0.67** | **0.69** |
-
-</div>
-
-> RTF (Real-Time Factor) on audio input. **Bold** = RTF < 1 (real-time). EPYC/M4 use 20s audio; i7-13700 uses a 10.3s clip.
-
-### Accuracy (WER%)
-
-<div align="center">
-
-| Benchmark | VibeVoice-ASR-7B (FP16) | VibeVoice-ASR-BitNet | Parakeet | Whisper | SenseVoice | FunASR |
-|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| MLC-EN | 7.82 | **8.25** | 8.40 | 13.57 | 12.39 | 11.36 |
-| MLC-FR | 16.03 | 17.41 | — | — | — | — |
-| MLC-IT | 15.67 | 17.23 | — | — | — | — |
-| MLC-KO | 9.83 | 11.15 | — | — | — | — |
-| MLC-PT | 22.41 | 24.87 | — | — | — | — |
-| MLC-VI | 20.15 | 22.38 | — | — | — | — |
-| AISHELL4 | 19.83 | 27.45 | — | — | 22.52 | **20.41** |
-| AMI-ihm | 17.42 | **21.36** | 21.92 | 27.07 | 30.81 | 32.07 |
-| AMI-sdm | 24.18 | **25.87** | 26.33 | 36.92 | 48.11 | 40.17 |
-| AliMeeting | 36.21 | 40.58 | — | — | **38.75** | 39.27 |
-| Fleurs-en | 4.73 | 5.21 | 4.09 | **3.99** | 6.84 | 4.93 |
-| Fleurs-zh | 7.92 | 8.35 | — | — | **5.56** | 7.00 |
-| Libri-clean | 2.17 | 2.41 | **1.49** | 1.98 | 2.78 | 1.58 |
-| Libri-other | 5.84 | 6.27 | **3.13** | 3.60 | 6.81 | 4.01 |
-| VoxPopuli | 4.92 | **5.18** | 5.26 | 7.19 | 8.63 | 6.46 |
-
-</div>
-
-> **Note:** The accuracy benchmarks above are evaluated on standard-accent speech corpora. Performance on accented or dialectal speech not represented in the training data may degrade more significantly, as is common with ASR models trained on specific data distributions.
+- **~2.8× faster end to end** than the upstream runtime on a 4-core AVX-512 VM —
+  compute RTF ≈ 0.37, real-time with headroom. AVX-512/VNNI kernels with runtime
+  dispatch, a register-tiled INT8 GEMM, vectorised quantisation epilogues, and a
+  layout-native depthwise convolution that removed 33% of graph time.
+- **27% smaller model** (1.70 → 1.23 GB): the LM shipped its tied output projection
+  twice; the F16 copy is dropped, at no measured accuracy cost (corpus WER 13.65 vs
+  13.95 for the original weights, same build, six languages).
+- **Deterministic**: identical transcripts at any thread count. Upstream output
+  changed with `-t`; the fork removes every partition-dependent rounding path.
+- **Portable binaries**: AVX2 baseline build with runtime dispatch up to VNNI —
+  no `-march=native` time bombs.
+- **A numerical fix**: the upstream AVX2 int8 kernels overflow their int16
+  accumulators on full-range activations; the VNNI kernels accumulate in int32.
+- **A reproduction harness**: every number in this README regenerates via
+  `bench/run_all.sh`, with kernel-level exact-reference tests (`kernel_bench`).
 
 ---
 
 ## Quick Start
 
-### Requirements
-
-- Python ≥ 3.9, CMake ≥ 3.14, GCC/Clang with C++11 support
-- ~2 GB disk space (code + quantized models)
-
-> **Windows users:** MSVC is **not** supported — the build requires GCC or Clang (MinGW-w64 recommended). See [Notes for Windows](#notes-for-windows) below.
-
-### One-Command Setup
-
 ```bash
-git clone --recursive https://github.com/microsoft/VibeASR.cpp.git
-cd VibeASR.cpp
+git clone --recursive -b claude/asr-cpu-optimization-cztnh9 \
+    https://github.com/martinobettucci/VibeASR-bitnet.cpp.git
+cd VibeASR-bitnet.cpp
+
 pip install -r requirements.txt
-python setup_env.py
+python setup_env.py --skip-download     # builds portable binaries, applies patches/
+
+./scripts/download_models.sh            # slim weights from P2Enjoy (1.23 GB)
 ```
 
-### Manual Build
-
-```bash
-git clone --recursive https://github.com/microsoft/VibeASR.cpp.git
-cd VibeASR.cpp
-
-# Build
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j$(nproc)
-
-# Download pre-quantized models
-pip install huggingface_hub
-huggingface-cli download microsoft/VibeVoice-ASR-BitNet --local-dir models/vibeasr
-```
-
----
-
-## Usage
-
-### CLI Inference
+### Run
 
 ```bash
 ./build/bin/asr_infer \
     --vae-model models/vibeasr/vibeasr-vae-encoder-i8_s.gguf \
-    --lm-model models/vibeasr/vibeasr-lm-i2_s-embed-q6_k.gguf \
-    --audio input.wav -t 4
+    --lm-model  models/vibeasr/vibeasr-lm-i2_s-tied.gguf \
+    --audio input.wav -t 4 --greedy
 ```
 
-### Web Demo (Gradio)
+Gradio demo: `python demo/gradio_asr_demo.py --port 7860 --vae-model ... --lm-model ...`
 
-```bash
-pip install gradio soundfile numpy
+### Weights
 
-python demo/gradio_asr_demo.py --port 7860 \
-    --vae-model models/vibeasr/vibeasr-vae-encoder-i8_s.gguf \
-    --lm-model models/vibeasr/vibeasr-lm-i2_s-embed-q6_k.gguf
-```
+| | file | size |
+|:--|:--|--:|
+| LM (ternary I2_S + tied Q6_K embedding) | `vibeasr-lm-i2_s-tied.gguf` | 526 MB |
+| VAE encoders (INT8) | `vibeasr-vae-encoder-i8_s.gguf` | 703 MB |
 
----
+Hosted at [P2Enjoy/VibeVoice-ASR-BitNet-slim](https://huggingface.co/P2Enjoy/VibeVoice-ASR-BitNet-slim)
+— the model card there is the authoritative source for accuracy tables and the
+weight-surgery details. The original weights remain at
+[microsoft/VibeVoice-ASR-BitNet](https://huggingface.co/microsoft/VibeVoice-ASR-BitNet)
+and still work with this runtime unchanged.
 
-## Notes for Windows
-
-Windows builds require **GCC or Clang** — MSVC is rejected by `src/CMakeLists.txt`. MinGW-w64
-(e.g. [WinLibs](https://winlibs.com/)) is recommended. Use the *MinGW Makefiles* generator, and
-keep the MinGW `bin` dir on your `PATH` at runtime so the executables find their DLLs:
-
-```bash
-cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_MAKE_PROGRAM=mingw32-make
-cmake --build build --target asr_infer -j
-```
-
-- Build with the command above rather than `setup_env.py` (its clang probe assumes a POSIX shell).
-- Gradio: run `python demo/gradio_asr_demo.py --port 7860` (model paths come from the script's
-  `MODEL_CONFIGS`, not `--vae-model`/`--lm-model`; pass `--bin build/bin/asr_infer.exe` if needed).
-
----
-
-## Model Conversion
-
-For most users, downloading pre-quantized models from [HuggingFace](https://huggingface.co/microsoft/VibeVoice-ASR-BitNet) is recommended. To convert from SafeTensors yourself:
-
-### Step 1: SafeTensors → F32 GGUF
-
-```bash
-# LM (BitNet) — handles weight preprocessing and config flattening automatically
-python utils/convert_lm_to_gguf.py <safetensors-dir>
-
-# VAE Tokenizer
-python utils/convert_vae_to_gguf.py <safetensors-dir>
-```
-
-### Step 2: F32 GGUF → Quantized GGUF
-
-```bash
-# VAE Tokenizer: F32 → I8_S
-./build/bin/llama-quantize \
-    <safetensors-dir>/vibeasr-vae-encoder-f32.gguf \
-    <safetensors-dir>/vibeasr-vae-encoder-i8_s.gguf \
-    I8_S 1 1
-
-# LM: F32 → I2_S (with Q6_K embeddings)
-./build/bin/llama-quantize --token-embedding-type Q6_K \
-    <safetensors-dir>/vibeasr-lm-f32.gguf \
-    <safetensors-dir>/vibeasr-lm-i2_s-embed-q6_k.gguf \
-    I2_S 1 1
-```
+Supported languages (measured): English, French, Italian, Portuguese from the
+training mix; Spanish and German generalise usably. Other languages degrade sharply
+— that is a property of the model's training data, not of this runtime.
 
 ---
 
@@ -293,7 +171,43 @@ serves every x86-64-with-AVX2 host and still lights up VNNI where present.
 
 ---
 
-## Citation
+## Notes for Windows
+
+Windows builds require **GCC or Clang** — MSVC is rejected by `src/CMakeLists.txt`.
+MinGW-w64 (e.g. [WinLibs](https://winlibs.com/)) is recommended:
+
+```bash
+cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_MAKE_PROGRAM=mingw32-make
+cmake --build build --target asr_infer -j
+```
+
+Keep the MinGW `bin` dir on `PATH` at runtime so the executables find their DLLs.
+
+---
+
+## Rebuilding the slim weights yourself
+
+The slim LM is produced from the original release with one tool — no retraining:
+
+```bash
+./scripts/download_models.sh            # or start from the microsoft GGUFs
+./build/bin/requant_lm_head original-lm.gguf slim-lm.gguf --drop
+python bench/model_report.py slim-lm.gguf      # verify the bit budget
+```
+
+For full SafeTensors → GGUF conversion, follow the
+[upstream instructions](https://github.com/microsoft/VibeASR.cpp#model-conversion);
+the conversion scripts in `utils/` are unchanged in this fork.
+
+---
+
+## Upstream project & citation
+
+The original project, its technical report, evaluation on the paper's benchmarks,
+and the unmodified documentation live at
+[microsoft/VibeASR.cpp](https://github.com/microsoft/VibeASR.cpp). If you use this
+work academically, cite their report:
 
 ```bibtex
 @article{xu2025vibeasrbitnet,
@@ -308,4 +222,4 @@ serves every x86-64-with-AVX2 host and still lights up VNNI where present.
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+MIT, as upstream.
