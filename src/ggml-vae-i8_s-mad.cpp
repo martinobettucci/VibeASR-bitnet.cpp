@@ -139,24 +139,33 @@ VIBEASR_TGT_AVX512 static float dequant_absmax_avx512(
     const __m512 signmask = _mm512_castsi512_ps(_mm512_set1_epi32(0x7fffffff));
     __m512 vmax = _mm512_setzero_ps();
 
+    // The tail is handled with masked full-width ops rather than a scalar loop.
+    // This is a determinism requirement, not a micro-optimisation: gcc contracts a
+    // scalar tail's mul+add into fma while the vector body rounds the intermediate
+    // product, and the body/tail boundary moves with the caller's thread partition.
+    // That skew showed up as transcripts changing between -t 2 and -t 4, first
+    // diverging by one quantisation step in a semantic-encoder stage-3 block. With
+    // every element on the identical instruction path, the result is independent of
+    // how callers chunk the range.
     int64_t i = 0;
     for (; i + 16 <= n; i += 16) {
         __m512 v = _mm512_cvtepi32_ps(_mm512_loadu_si512((const void *)(acc + i)));
-        // mul then add, not fmadd: the scalar loop rounds the intermediate product,
-        // and bit-identical output is the acceptance test for this rewrite.
+        // mul then add, not fmadd: the original scalar loop rounds the intermediate
+        // product, and bit-identical output was the acceptance test for the rewrite.
         v = _mm512_mul_ps(v, vscale);
         v = _mm512_add_ps(v, bias ? _mm512_loadu_ps(bias + i) : vbias_s);
         _mm512_storeu_ps(out + i, v);
         vmax = _mm512_max_ps(vmax, _mm512_and_ps(v, signmask));
     }
-    float amax = _mm512_reduce_max_ps(vmax);
-    for (; i < n; i++) {
-        float v = (float) acc[i] * scale + (bias ? bias[i] : bias_scalar);
-        out[i] = v;
-        float av = v < 0.0f ? -v : v;
-        if (av > amax) amax = av;
+    if (i < n) {
+        const __mmask16 m = (__mmask16)((1u << (n - i)) - 1);
+        __m512 v = _mm512_cvtepi32_ps(_mm512_maskz_loadu_epi32(m, acc + i));
+        v = _mm512_mul_ps(v, vscale);
+        v = _mm512_add_ps(v, bias ? _mm512_maskz_loadu_ps(m, bias + i) : vbias_s);
+        _mm512_mask_storeu_ps(out + i, m, v);
+        vmax = _mm512_mask_max_ps(vmax, m, vmax, _mm512_and_ps(v, signmask));
     }
-    return amax;
+    return _mm512_reduce_max_ps(vmax);
 }
 
 VIBEASR_TGT_AVX512 static void quant_i8_avx512(
@@ -168,6 +177,9 @@ VIBEASR_TGT_AVX512 static void quant_i8_avx512(
     const __m512 vsign = _mm512_castsi512_ps(_mm512_set1_epi32(0x80000000));
     const __m128i zero8 = _mm_setzero_si128();
 
+    // Masked tail for the same determinism reason as dequant_absmax_avx512: a
+    // scalar tail rounds differently (roundf vs this sequence under contraction)
+    // and the boundary moves with the caller's chunking.
     int64_t i = 0;
     for (; i + 16 <= n; i += 16) {
         __m512 v = _mm512_mul_ps(_mm512_loadu_ps(in + i), vs);
@@ -179,15 +191,84 @@ VIBEASR_TGT_AVX512 static void quant_i8_avx512(
         if (relu) b = _mm_max_epi8(b, zero8);
         _mm_storeu_si128((__m128i *)(out + i), b);
     }
-    for (; i < n; i++) {
-        float v = in[i] * inv_scale;
-        v = v < -127.0f ? -127.0f : (v > 127.0f ? 127.0f : v);
-        int8_t q = (int8_t) roundf(v);
-        out[i] = relu && q < 0 ? 0 : q;
+    if (i < n) {
+        const __mmask16 m = (__mmask16)((1u << (n - i)) - 1);
+        __m512 v = _mm512_mul_ps(_mm512_maskz_loadu_ps(m, in + i), vs);
+        v = _mm512_min_ps(_mm512_max_ps(v, vlo), vhi);
+        const __m512 half = _mm512_or_ps(vhalf, _mm512_and_ps(v, vsign));
+        __m512i q = _mm512_cvttps_epi32(_mm512_add_ps(v, half));
+        __m128i b = _mm512_cvtsepi32_epi8(q);
+        if (relu) b = _mm_max_epi8(b, zero8);
+        _mm_mask_storeu_epi8(out + i, m, b);
     }
 }
 
 #endif  // VIBEASR_HAS_AVX512_PATH
+
+#if defined(VIBEASR_HAS_AVX512_PATH)
+
+// val[i] = a[i]*inv_a*gamma[(start+i) % ne0] + b[i]*inv_b -- the ADD_SCALED body,
+// every element through the identical masked-AVX-512 path. Reciprocals are taken
+// once here so callers cannot mix a divide-flavoured scalar loop with a
+// reciprocal-flavoured vector loop, which is exactly the skew that made transcripts
+// depend on thread count (the scalar/vector boundary moved with the partition).
+VIBEASR_TGT_AVX512 static float add_scaled_avx512(
+        const int8_t * a, const int8_t * b, const float * gamma_base,
+        int64_t ne0, int64_t start, int64_t n,
+        float inv_a, float inv_b, float * out) {
+    const __m512 va = _mm512_set1_ps(inv_a);
+    const __m512 vb = _mm512_set1_ps(inv_b);
+    const __m512 signmask = _mm512_castsi512_ps(_mm512_set1_epi32(0x7fffffff));
+    __m512 vmax = _mm512_setzero_ps();
+
+    int64_t i = 0;
+    while (i < n) {
+        const int64_t col = (start + i) % ne0;
+        const int64_t seg = (ne0 - col) < (n - i) ? (ne0 - col) : (n - i);   // stay in row
+        const int64_t take = seg < 16 ? seg : 16;
+        const __mmask16 m = take == 16 ? (__mmask16) 0xffff
+                                       : (__mmask16)((1u << take) - 1);
+        const __m512 af = _mm512_cvtepi32_ps(
+            _mm512_cvtepi8_epi32(_mm_maskz_loadu_epi8(m, a + i)));
+        const __m512 bf = _mm512_cvtepi32_ps(
+            _mm512_cvtepi8_epi32(_mm_maskz_loadu_epi8(m, b + i)));
+        const __m512 gf = gamma_base ? _mm512_maskz_loadu_ps(m, gamma_base + col)
+                                     : _mm512_set1_ps(1.0f);
+        __m512 v = _mm512_mul_ps(_mm512_mul_ps(af, va), gf);
+        v = _mm512_add_ps(v, _mm512_mul_ps(bf, vb));
+        _mm512_mask_storeu_ps(out + i, m, v);
+        vmax = _mm512_mask_max_ps(vmax, m, vmax, _mm512_and_ps(v, signmask));
+        i += take;
+    }
+    return _mm512_reduce_max_ps(vmax);
+}
+
+#endif  // VIBEASR_HAS_AVX512_PATH
+
+float vibeasr_i8s_add_scaled_absmax(const int8_t * a, const int8_t * b,
+                                    const float * gamma, int64_t gamma_ne0,
+                                    int64_t ne0, int64_t start, int64_t n,
+                                    float a_scale, float b_scale, float * out) {
+#if defined(VIBEASR_HAS_AVX512_PATH)
+    if (vibeasr_isa() >= VIBEASR_ISA_AVX512) {
+        // scalar gamma broadcasts by folding it into inv_a
+        const int per_channel = gamma_ne0 != 1;
+        const float inv_a = per_channel ? 1.0f / a_scale : gamma[0] / a_scale;
+        return add_scaled_avx512(a, b, per_channel ? gamma : NULL, ne0, start, n,
+                                 inv_a, 1.0f / b_scale, out);
+    }
+#endif
+    const float inv_a = 1.0f / a_scale, inv_b = 1.0f / b_scale;
+    float amax = 0.0f;
+    for (int64_t i = 0; i < n; i++) {
+        const float g = gamma_ne0 == 1 ? gamma[0] : gamma[(start + i) % ne0];
+        const float v = (float) a[i] * inv_a * g + (float) b[i] * inv_b;
+        out[i] = v;
+        const float av = v < 0.0f ? -v : v;
+        if (av > amax) amax = av;
+    }
+    return amax;
+}
 
 float vibeasr_i8s_dequant_absmax(const int32_t * acc, int64_t n, float scale,
                                  const float * bias, float bias_scalar, float * out) {

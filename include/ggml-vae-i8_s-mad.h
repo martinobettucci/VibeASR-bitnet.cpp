@@ -51,6 +51,15 @@ float vibeasr_i8s_dequant_absmax(const int32_t * acc, int64_t n, float scale,
 void vibeasr_i8s_quant_i8(const float * in, int8_t * out, int64_t n,
                           float inv_scale, int relu);
 
+// The ADD_SCALED body: out[i] = a[i]/a_scale * gamma + b[i]/b_scale over span
+// [start, start+n) of a tensor with row length ne0; returns max |out[i]|. Uniform
+// per element regardless of how callers chunk the span -- see the implementation
+// for why that is a determinism requirement.
+float vibeasr_i8s_add_scaled_absmax(const int8_t * a, const int8_t * b,
+                                    const float * gamma, int64_t gamma_ne0,
+                                    int64_t ne0, int64_t start, int64_t n,
+                                    float a_scale, float b_scale, float * out);
+
 // Optimized INT8 × INT8 vec_dot for n=4 (process 8 columns simultaneously)
 void ggml_vec_dot_i8_i8_n4_col8(
     int32_t * s, size_t bs,

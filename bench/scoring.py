@@ -60,7 +60,19 @@ def _spell(match, lang):
     if not cleaned.isdigit():
         return raw
     try:
-        return num2words(int(cleaned), lang=lang)
+        n = int(cleaned)
+        # Integers in the plausible-year range are read as years: references write
+        # "1940" and the model correctly says "nineteen forty", so the cardinal
+        # spelling ("one thousand nine hundred forty") charged several word errors
+        # for a transcription that was right. Measured on FLEURS English, the worst
+        # clip's 35% WER was almost entirely this. Non-year quantities in the range
+        # ("1500 copies") lose either way; years dominate in this corpus.
+        if 1500 <= n <= 2099 and len(cleaned) == 4:
+            try:
+                return num2words(n, lang=lang, to="year")
+            except Exception:
+                pass
+        return num2words(n, lang=lang)
     except Exception:
         return raw
 

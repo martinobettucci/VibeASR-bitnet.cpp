@@ -857,6 +857,32 @@ static int32_t vae_encode_impl(
         return -1;
     }
     
+    // VIBEASR_TAP_MARKS: dump every MARK: node for determinism bisection.
+    if (const char * mpath = getenv("VIBEASR_TAP_MARKS")) {
+        FILE * mf = fopen(mpath, "ab");
+        if (mf) {
+            for (int ni = 0; ni < ggml_graph_n_nodes(gf); ni++) {
+                struct ggml_tensor * t = ggml_graph_node(gf, ni);
+                if (strncmp(t->name, "MARK:", 5) != 0) continue;
+                const int64_t n = ggml_nelements(t);
+                std::vector<float> buf(n);
+                if (t->type == GGML_TYPE_I8_S) {
+                    const int8_t * q = (const int8_t *) t->data;
+                    const float sc = *(const float *)((const char *) t->data + n);
+                    const float inv = sc != 0.0f ? 1.0f / sc : 0.0f;
+                    for (int64_t i = 0; i < n; i++) buf[i] = (float) q[i] * inv;
+                } else if (t->type == GGML_TYPE_F32) {
+                    memcpy(buf.data(), t->data, n * sizeof(float));
+                } else { continue; }
+                uint32_t nl = (uint32_t) strlen(t->name);
+                fwrite(&nl, 4, 1, mf); fwrite(t->name, 1, nl, mf);
+                int64_t n64 = n; fwrite(&n64, 8, 1, mf);
+                fwrite(buf.data(), 4, n, mf);
+            }
+            fclose(mf);
+        }
+    }
+
     // Dump the tapped block outputs (dequantised) for offline calibration.
     if (tap_env && !tap_blocks.empty()) {
         FILE * f = fopen(tap_env, "ab");

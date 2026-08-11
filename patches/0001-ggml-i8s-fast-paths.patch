@@ -59,10 +59,161 @@ index 99f43c6..f03d62d 100644
  
  void ggml_gemm_q4_0_4x4_q8_0(int n, float * restrict s, size_t bs, const void * restrict vx, const void * restrict vy, int nr, int nc) {
 diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c
-index 23303be..aaca825 100644
+index 23303be..192ff84 100644
 --- a/ggml/src/ggml.c
 +++ b/ggml/src/ggml.c
-@@ -19094,12 +19094,11 @@ static void ggml_compute_forward_mul_mat_add(
+@@ -18726,108 +18726,14 @@ static void ggml_compute_forward_add_scaled(
+     float local_absmax = 0.0f;
+ 
+ #if defined(__AVX2__)
+-    if (gamma_ne0 != 1) {
+-        const __m256 v_inv_a = _mm256_set1_ps(1.0f / a_scale);
+-        const __m256 v_inv_b = _mm256_set1_ps(1.0f / b_scale);
+-        const __m256 v_sign_mask = _mm256_set1_ps(-0.0f);
+-        __m256 vmax = _mm256_setzero_ps();
+-
+-        int64_t i = i0;
+-        // align to ne0 boundary for correct gamma indexing
+-        int64_t row_offset = i0 % ne0;
+-        if (row_offset != 0) {
+-            int64_t row_end = i0 + (ne0 - row_offset);
+-            if (row_end > i1) row_end = i1;
+-            for (; i < row_end; i++) {
+-                float gamma = gamma_data[i % ne0];
+-                float val = (float)a_data[i] / a_scale * gamma + (float)b_data[i] / b_scale;
+-                float_buf[i] = val;
+-                float av = val < 0.0f ? -val : val;
+-                if (av > local_absmax) local_absmax = av;
+-            }
+-        }
+-        // main loop: process full rows in chunks of 8
+-        for (; i + 7 < i1; i += 8) {
+-            int64_t gi = i % ne0;
+-            // if we cross a row boundary within this chunk, fall back to scalar
+-            if (gi + 8 > ne0) {
+-                for (int64_t j = 0; j < 8; j++) {
+-                    float gamma = gamma_data[(i + j) % ne0];
+-                    float val = (float)a_data[i + j] / a_scale * gamma + (float)b_data[i + j] / b_scale;
+-                    float_buf[i + j] = val;
+-                    float av = val < 0.0f ? -val : val;
+-                    if (av > local_absmax) local_absmax = av;
+-                }
+-                continue;
+-            }
+-            __m128i ai8 = _mm_loadl_epi64((const __m128i *)(a_data + i));
+-            __m128i bi8 = _mm_loadl_epi64((const __m128i *)(b_data + i));
+-            __m256i ai32 = _mm256_cvtepi8_epi32(ai8);
+-            __m256i bi32 = _mm256_cvtepi8_epi32(bi8);
+-            __m256 af = _mm256_cvtepi32_ps(ai32);
+-            __m256 bf = _mm256_cvtepi32_ps(bi32);
+-            __m256 gf = _mm256_loadu_ps(gamma_data + gi);
+-            __m256 val = _mm256_add_ps(
+-                _mm256_mul_ps(_mm256_mul_ps(af, v_inv_a), gf),
+-                _mm256_mul_ps(bf, v_inv_b));
+-            _mm256_storeu_ps(float_buf + i, val);
+-            __m256 av = _mm256_andnot_ps(v_sign_mask, val);
+-            vmax = _mm256_max_ps(vmax, av);
+-        }
+-        // scalar tail
+-        for (; i < i1; i++) {
+-            float gamma = gamma_data[i % ne0];
+-            float val = (float)a_data[i] / a_scale * gamma + (float)b_data[i] / b_scale;
+-            float_buf[i] = val;
+-            float av = val < 0.0f ? -val : val;
+-            if (av > local_absmax) local_absmax = av;
+-        }
+-        // horizontal max
+-        __m128 hi = _mm256_extractf128_ps(vmax, 1);
+-        __m128 lo = _mm256_castps256_ps128(vmax);
+-        __m128 m = _mm_max_ps(hi, lo);
+-        m = _mm_max_ps(m, _mm_movehl_ps(m, m));
+-        m = _mm_max_ps(m, _mm_shuffle_ps(m, m, 1));
+-        float simd_max = _mm_cvtss_f32(m);
+-        if (simd_max > local_absmax) local_absmax = simd_max;
+-    } else {
+-        // scalar gamma (gamma_ne0 == 1)
+-        const float gamma_scalar = gamma_data[0];
+-        const __m256 v_inv_a = _mm256_set1_ps(1.0f / a_scale);
+-        const __m256 v_inv_b = _mm256_set1_ps(1.0f / b_scale);
+-        const __m256 v_gamma = _mm256_set1_ps(gamma_scalar);
+-        const __m256 v_sign_mask = _mm256_set1_ps(-0.0f);
+-        __m256 vmax = _mm256_setzero_ps();
+-
+-        int64_t i = i0;
+-        for (; i + 7 < i1; i += 8) {
+-            __m128i ai8 = _mm_loadl_epi64((const __m128i *)(a_data + i));
+-            __m128i bi8 = _mm_loadl_epi64((const __m128i *)(b_data + i));
+-            __m256i ai32 = _mm256_cvtepi8_epi32(ai8);
+-            __m256i bi32 = _mm256_cvtepi8_epi32(bi8);
+-            __m256 af = _mm256_cvtepi32_ps(ai32);
+-            __m256 bf = _mm256_cvtepi32_ps(bi32);
+-            __m256 val = _mm256_add_ps(
+-                _mm256_mul_ps(_mm256_mul_ps(af, v_inv_a), v_gamma),
+-                _mm256_mul_ps(bf, v_inv_b));
+-            _mm256_storeu_ps(float_buf + i, val);
+-            __m256 av = _mm256_andnot_ps(v_sign_mask, val);
+-            vmax = _mm256_max_ps(vmax, av);
+-        }
+-        for (; i < i1; i++) {
+-            float val = (float)a_data[i] / a_scale * gamma_scalar + (float)b_data[i] / b_scale;
+-            float_buf[i] = val;
+-            float av = val < 0.0f ? -val : val;
+-            if (av > local_absmax) local_absmax = av;
+-        }
+-        __m128 hi = _mm256_extractf128_ps(vmax, 1);
+-        __m128 lo = _mm256_castps256_ps128(vmax);
+-        __m128 m = _mm_max_ps(hi, lo);
+-        m = _mm_max_ps(m, _mm_movehl_ps(m, m));
+-        m = _mm_max_ps(m, _mm_shuffle_ps(m, m, 1));
+-        float simd_max = _mm_cvtss_f32(m);
+-        if (simd_max > local_absmax) local_absmax = simd_max;
+-    }
++    // Uniform per-element path (src/ggml-vae-i8_s-mad.cpp). The previous code mixed
++    // a reciprocal-multiplying vector loop with divide-flavoured scalar edges at
++    // chunk starts, row crossings and tails -- and those edges move with the thread
++    // partition, so transcripts changed with -t. One code path for every element
++    // makes the op partition-independent.
++    local_absmax = vibeasr_i8s_add_scaled_absmax(
++        a_data + i0, b_data + i0, gamma_data, gamma_ne0, ne0, i0, i1 - i0,
++        a_scale, b_scale, float_buf + i0);
+ #elif defined(__ARM_NEON)
+     if (gamma_ne0 != 1) {
+         const float32x4_t v_inv_a = vdupq_n_f32(1.0f / a_scale);
+@@ -18959,29 +18865,10 @@ static void ggml_compute_forward_add_scaled(
+     int8_t * dst_data = (int8_t *)dst->data;
+ 
+ #if defined(__AVX2__)
+-    {
+-        const __m256 v_inv_scale = _mm256_set1_ps(inv_scale);
+-        const __m256 v_min = _mm256_set1_ps(-127.0f);
+-        const __m256 v_max = _mm256_set1_ps(127.0f);
+-        int64_t i = i0;
+-        for (; i + 7 < i1; i += 8) {
+-            __m256 vf = _mm256_loadu_ps(float_buf + i);
+-            vf = _mm256_mul_ps(vf, v_inv_scale);
+-            vf = _mm256_max_ps(vf, v_min);
+-            vf = _mm256_min_ps(vf, v_max);
+-            __m256i vi32 = _mm256_cvtps_epi32(vf);
+-            __m256i vi16 = _mm256_packs_epi32(vi32, vi32);
+-            vi16 = _mm256_permute4x64_epi64(vi16, 0xD8);
+-            __m256i vi8 = _mm256_packs_epi16(vi16, vi16);
+-            vi8 = _mm256_permute4x64_epi64(vi8, 0xD8);
+-            _mm_storel_epi64((__m128i *)(dst_data + i), _mm256_castsi256_si128(vi8));
+-        }
+-        for (; i < i1; i++) {
+-            float v = float_buf[i] * inv_scale;
+-            v = v < -127.0f ? -127.0f : (v > 127.0f ? 127.0f : v);
+-            dst_data[i] = (int8_t)roundf(v);
+-        }
+-    }
++    // Same uniformity argument as step 1; also aligns rounding with the fused ops
++    // (roundf half-away semantics) instead of cvtps' nearest-even.
++    vibeasr_i8s_quant_i8(float_buf + i0, (int8_t *) dst->data + i0, i1 - i0,
++                         inv_scale, /*relu=*/0);
+ #elif defined(__ARM_NEON)
+     {
+         float32x4_t v_inv_scale = vdupq_n_f32(inv_scale);
+@@ -19094,12 +18981,11 @@ static void ggml_compute_forward_mul_mat_add(
              // acc_buf layout: [C, n_cols] (channel-major)
              // dst layout: ne[0]=1, ne[1]=N, ne[2]=C => physical [C, N] (channel-major)
              for (int64_t ch = 0; ch < C; ch++) {
@@ -80,7 +231,7 @@ index 23303be..aaca825 100644
              }
  
          }
-@@ -19127,11 +19126,10 @@ static void ggml_compute_forward_mul_mat_add(
+@@ -19127,11 +19013,10 @@ static void ggml_compute_forward_mul_mat_add(
  
          if (col0 < col1) {
              for (int64_t ch = 0; ch < C; ch++) {
@@ -96,7 +247,7 @@ index 23303be..aaca825 100644
              }
          }
  
-@@ -19186,13 +19184,11 @@ static void ggml_compute_forward_mul_mat_add(
+@@ -19186,13 +19071,11 @@ static void ggml_compute_forward_mul_mat_add(
  
              // Convert int32 -> float with combined_scale + bias, store in float_buf
              for (int64_t c = 0; c < n_cols; c++) {
@@ -115,7 +266,7 @@ index 23303be..aaca825 100644
              }
  
          }
-@@ -19219,13 +19215,10 @@ static void ggml_compute_forward_mul_mat_add(
+@@ -19219,13 +19102,10 @@ static void ggml_compute_forward_mul_mat_add(
          const float inv_scale = (global_max != 0.0f) ? 127.0f / global_max : 0.0f;
  
          if (col0 < col1) {
@@ -133,7 +284,7 @@ index 23303be..aaca825 100644
          }
  
          // Thread 0 stores the per-tensor output scale
-@@ -19296,12 +19289,11 @@ static void ggml_compute_forward_mul_mat_add_relu(
+@@ -19296,12 +19176,11 @@ static void ggml_compute_forward_mul_mat_add_relu(
              }
  
              for (int64_t ch = 0; ch < C; ch++) {
@@ -151,7 +302,7 @@ index 23303be..aaca825 100644
              }
          }
  
-@@ -19324,12 +19316,10 @@ static void ggml_compute_forward_mul_mat_add_relu(
+@@ -19324,12 +19203,10 @@ static void ggml_compute_forward_mul_mat_add_relu(
  
          if (col0 < col1) {
              for (int64_t ch = 0; ch < C; ch++) {
@@ -168,7 +319,7 @@ index 23303be..aaca825 100644
              }
          }
  
-@@ -19372,13 +19362,11 @@ static void ggml_compute_forward_mul_mat_add_relu(
+@@ -19372,13 +19249,11 @@ static void ggml_compute_forward_mul_mat_add_relu(
              }
  
              for (int64_t c = 0; c < n_cols; c++) {
@@ -187,7 +338,7 @@ index 23303be..aaca825 100644
              }
          }
  
-@@ -19400,14 +19388,10 @@ static void ggml_compute_forward_mul_mat_add_relu(
+@@ -19400,14 +19275,10 @@ static void ggml_compute_forward_mul_mat_add_relu(
          const float inv_scale = (global_max != 0.0f) ? 127.0f / global_max : 0.0f;
  
          if (col0 < col1) {
@@ -206,7 +357,7 @@ index 23303be..aaca825 100644
          }
  
          if (ith == 0) {
-@@ -22114,6 +22098,61 @@ struct ggml_cplan ggml_graph_plan(
+@@ -22114,6 +21985,61 @@ struct ggml_cplan ggml_graph_plan(
      return cplan;
  }
  
@@ -268,7 +419,7 @@ index 23303be..aaca825 100644
  static thread_ret_t ggml_graph_compute_thread(void * data) {
      struct ggml_compute_state * state = (struct ggml_compute_state *) data;
      struct ggml_threadpool    * tp    = state->threadpool;
-@@ -22134,6 +22173,14 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
+@@ -22134,6 +22060,14 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
      for (int node_n = 0; node_n < cgraph->n_nodes && !tp->abort; node_n++) {
          struct ggml_tensor * node = cgraph->nodes[node_n];
  
@@ -283,7 +434,7 @@ index 23303be..aaca825 100644
          ggml_compute_forward(&params, node);
  
          if (state->ith == 0 && cplan->abort_callback &&
-@@ -22143,6 +22190,17 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
+@@ -22143,6 +22077,17 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
          }
  
          ggml_barrier(state->threadpool);
