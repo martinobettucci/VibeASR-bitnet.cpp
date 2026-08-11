@@ -197,10 +197,22 @@ struct ConvNeXtBlock {
 
         x = ggml_nn_rms_norm(ctx, x, mixer_norm_weight);
 
+        // Layout-native mixer: the depthwise conv runs directly on [dim, frames],
+        // replacing permute/cont/im2col/matmul/cont with one node. Kill switch
+        // VIBEASR_DWCONV=0 restores the original chain; both produce identical
+        // bytes (same int32 sums, same epilogue), which is the acceptance test.
+        static const bool dw_direct = [](){
+            const char * e = getenv("VIBEASR_DWCONV");
+            return !(e && strcmp(e, "0") == 0);
+        }();
+        if (is_i8s && dw_direct) {
+            x = ggml_mul_mat_add_dw_direct(ctx, mixer_conv_weight, x, mixer_conv_bias);
+        } else {
         x = ggml_cont(ctx, ggml_permute(ctx, x, 1, 0, 2, 3));
 
         x = ggml_nn_conv_1d_dw(ctx, x, mixer_conv_weight, mixer_conv_bias,
                                 /*stride=*/1, /*padding=*/kernel_size-1, /*dilation=*/1);
+        }
 
         if (is_i8s) {
             x = ggml_add_scaled(ctx, x, residual, mixer_layer_scale);

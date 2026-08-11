@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 #include <chrono>
 #include <string>
 #include <vector>
@@ -204,6 +205,58 @@ static void check_gemm(int n, int nr, int nc, int amp, Tally & t, bool verbose) 
     }
 }
 
+// The layout-native depthwise conv must match an exact scalar reference including
+// the causal zero padding, the scale/bias epilogue and the returned absmax.
+static void check_dwconv(int64_t C, int k, int64_t frames, Tally & t, bool verbose) {
+    std::vector<int8_t> x((size_t) C * frames), w((size_t) C * k);
+    std::vector<float> bias(C), got((size_t) C * frames), want((size_t) C * frames);
+    fill_i8(x.data(), x.size(), 127);
+    fill_i8(w.data(), w.size(), 127);
+    for (int64_t c = 0; c < C; c++) bias[c] = ((int) (rng() % 200) - 100) / 7.0f;
+    const float cs = 0.00371f;
+
+    float wmax = 0.0f;
+    for (int64_t tt = 0; tt < frames; tt++) {
+        for (int64_t c = 0; c < C; c++) {
+            int32_t sum = 0;
+            for (int j = 0; j < k; j++) {
+                const int64_t src = tt + j - (k - 1);
+                if (src >= 0) sum += (int32_t) w[c * k + j] * (int32_t) x[src * C + c];
+            }
+            const float v = fmaf((float) sum, cs, bias[c]);
+            want[tt * C + c] = v;
+            const float av = v < 0 ? -v : v;
+            if (av > wmax) wmax = av;
+        }
+    }
+    // run in two uneven spans to prove chunking does not change values
+    const int64_t mid = frames / 3 + 1;
+    float m1 = vibeasr_i8s_dwconv_absmax(x.data(), w.data(), bias.data(), C, k, frames, 0, mid, cs, got.data());
+    float m2 = vibeasr_i8s_dwconv_absmax(x.data(), w.data(), bias.data(), C, k, frames, mid, frames, cs, got.data());
+    const float gmax = m1 > m2 ? m1 : m2;
+
+    bool ok = gmax == wmax;
+    size_t bad = want.size();
+    for (size_t i = 0; i < want.size(); i++) if (got[i] != want[i]) { bad = i; break; }
+    ok = ok && bad == want.size();
+    t.note(ok);
+    if (!ok && verbose) {
+        printf("    dwconv C=%lld k=%d frames=%lld MISMATCH (absmax %g vs %g)\n",
+               (long long) C, k, (long long) frames, gmax, wmax);
+        if (bad < want.size()) {
+            const int64_t tt = (int64_t) bad / C, c = (int64_t) bad % C;
+            int32_t sum = 0;
+            for (int j = 0; j < k; j++) {
+                const int64_t src = tt + j - (k - 1);
+                if (src >= 0) sum += (int32_t) w[c * k + j] * (int32_t) x[src * C + c];
+            }
+            printf("      first bad: t=%lld c=%lld got=%.9g want=%.9g sum=%d fma=%.9g\n",
+                   (long long) tt, (long long) c, got[bad], want[bad], sum,
+                   fmaf((float) sum, cs, bias[c]));
+        }
+    }
+}
+
 // --- throughput ------------------------------------------------------------
 
 int main(int argc, char ** argv) {
@@ -232,6 +285,9 @@ int main(int argc, char ** argv) {
         // Tiled GEMM: sizes on and off the 4x4 tile so the ragged paths are covered.
         const int gemm_shapes[][3] = {{64,8,8},{128,4,4},{512,17,13},{2048,32,16},{8960,5,7},{32,9,3}};
         for (auto & g : gemm_shapes) { rng_seed(0xdeadbeef); check_gemm(g[0], g[1], g[2], reg.amp, t, true); }
+        // dwconv: model shapes (dim 32..2048, k 4..16) plus ragged channel counts
+        const int64_t dw_shapes[][3] = {{32,8,257},{64,4,100},{256,8,33},{2048,8,62},{40,16,50},{17,7,29}};
+        for (auto & d : dw_shapes) { rng_seed(0xfeedbeef); check_dwconv(d[0], (int) d[1], d[2], t, true); }
         printf("  %d/%d dot products match the scalar reference%s\n\n",
                t.checked - t.wrong, t.checked, t.wrong ? "" : "  [ok]");
         if (t.wrong && reg.fatal) rc = 1;

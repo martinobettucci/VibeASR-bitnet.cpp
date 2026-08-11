@@ -150,18 +150,19 @@ VIBEASR_TGT_AVX512 static float dequant_absmax_avx512(
     int64_t i = 0;
     for (; i + 16 <= n; i += 16) {
         __m512 v = _mm512_cvtepi32_ps(_mm512_loadu_si512((const void *)(acc + i)));
-        // mul then add, not fmadd: the original scalar loop rounds the intermediate
-        // product, and bit-identical output was the acceptance test for the rewrite.
-        v = _mm512_mul_ps(v, vscale);
-        v = _mm512_add_ps(v, bias ? _mm512_loadu_ps(bias + i) : vbias_s);
+        // Explicit fmadd. An earlier revision claimed mul-then-add here; gcc was
+        // contracting the pair to fma regardless, so that claim described the source,
+        // not the binary. Making the fma explicit pins the executed semantics against
+        // compiler and flag changes -- what matters for determinism is that every
+        // element takes this same path, which the masked tail below preserves.
+        v = _mm512_fmadd_ps(v, vscale, bias ? _mm512_loadu_ps(bias + i) : vbias_s);
         _mm512_storeu_ps(out + i, v);
         vmax = _mm512_max_ps(vmax, _mm512_and_ps(v, signmask));
     }
     if (i < n) {
         const __mmask16 m = (__mmask16)((1u << (n - i)) - 1);
         __m512 v = _mm512_cvtepi32_ps(_mm512_maskz_loadu_epi32(m, acc + i));
-        v = _mm512_mul_ps(v, vscale);
-        v = _mm512_add_ps(v, bias ? _mm512_maskz_loadu_ps(m, bias + i) : vbias_s);
+        v = _mm512_fmadd_ps(v, vscale, bias ? _mm512_maskz_loadu_ps(m, bias + i) : vbias_s);
         _mm512_mask_storeu_ps(out + i, m, v);
         vmax = _mm512_mask_max_ps(vmax, m, vmax, _mm512_and_ps(v, signmask));
     }
@@ -234,8 +235,7 @@ VIBEASR_TGT_AVX512 static float add_scaled_avx512(
             _mm512_cvtepi8_epi32(_mm_maskz_loadu_epi8(m, b + i)));
         const __m512 gf = gamma_base ? _mm512_maskz_loadu_ps(m, gamma_base + col)
                                      : _mm512_set1_ps(1.0f);
-        __m512 v = _mm512_mul_ps(_mm512_mul_ps(af, va), gf);
-        v = _mm512_add_ps(v, _mm512_mul_ps(bf, vb));
+        __m512 v = _mm512_fmadd_ps(bf, vb, _mm512_mul_ps(_mm512_mul_ps(af, va), gf));
         _mm512_mask_storeu_ps(out + i, m, v);
         vmax = _mm512_mask_max_ps(vmax, m, vmax, _mm512_and_ps(v, signmask));
         i += take;
@@ -244,6 +244,103 @@ VIBEASR_TGT_AVX512 static float add_scaled_avx512(
 }
 
 #endif  // VIBEASR_HAS_AVX512_PATH
+
+#if defined(VIBEASR_HAS_AVX512_PATH)
+
+// Layout-native causal depthwise conv, the compute step of MUL_MAT_ADD's dw_direct
+// branch. x is [C, frames] with C contiguous -- the layout the ConvNeXt blocks
+// already hold -- so out[:,t] = sum_j w[:,j] * x[:,t+j-(k-1)] is k fused
+// multiply-adds over contiguous C-length vectors. No permute, no im2col, no matmul
+// dispatch: this one kernel replaces that whole five-op chain.
+//
+// Products are exact in int16 (|x|,|w| <= 127), accumulated in int32, then
+// converted once: val = sum * combined_scale + bias[c], the same arithmetic and
+// the same single division upstream that the im2col path performs. Masked
+// full-width ops throughout -- same determinism contract as the other helpers.
+VIBEASR_TGT_AVX512 static float dwconv_avx512(
+        const int8_t * x, const int8_t * w, const float * bias,
+        int64_t C, int k, int64_t frames, int64_t t0, int64_t t1,
+        float combined_scale, float * out) {
+    const __m512 vscale = _mm512_set1_ps(combined_scale);
+    const __m512 signmask = _mm512_castsi512_ps(_mm512_set1_epi32(0x7fffffff));
+    __m512 vmax = _mm512_setzero_ps();
+
+    // widen the taps once: w16[j] over a 32-channel chunk
+    // (w is [k,1,C]: tap j of channel c at w[c*k + j])
+    for (int64_t c0 = 0; c0 < C; c0 += 32) {
+        const int64_t cw = (C - c0) < 32 ? (C - c0) : 32;
+        const __mmask32 m32 = cw == 32 ? 0xffffffffu : ((1u << cw) - 1);
+        const __mmask16 mlo = (__mmask16)(m32 & 0xffff);
+        const __mmask16 mhi = (__mmask16)(m32 >> 16);
+
+        __m512i w16[16];  // k <= 16 in this model (kernel sizes 4..16)
+        int8_t wtap[32];
+        for (int j = 0; j < k; j++) {
+            for (int64_t c = 0; c < cw; c++) wtap[c] = w[(c0 + c) * k + j];
+            for (int64_t c = cw; c < 32; c++) wtap[c] = 0;
+            w16[j] = _mm512_cvtepi8_epi16(_mm256_loadu_si256((const __m256i *) wtap));
+        }
+        const __m512 blo = _mm512_maskz_loadu_ps(mlo, bias + c0);
+        const __m512 bhi = mhi ? _mm512_maskz_loadu_ps(mhi, bias + c0 + 16)
+                               : _mm512_setzero_ps();
+
+        for (int64_t t = t0; t < t1; t++) {
+            __m512i acc = _mm512_setzero_si512();   // 32 lanes int16 would overflow; use madd pairs? no:
+            __m512i acc_lo = _mm512_setzero_si512();
+            __m512i acc_hi = _mm512_setzero_si512();
+            for (int j = 0; j < k; j++) {
+                const int64_t tt = t + j - (k - 1);
+                if (tt < 0) continue;               // causal zero padding
+                const __m256i x8 = _mm256_maskz_loadu_epi8(m32, x + tt * C + c0);
+                const __m512i x16 = _mm512_cvtepi8_epi16(x8);
+                const __m512i prod = _mm512_mullo_epi16(w16[j], x16);  // exact, |p|<=16129
+                acc_lo = _mm512_add_epi32(acc_lo,
+                    _mm512_cvtepi16_epi32(_mm512_castsi512_si256(prod)));
+                acc_hi = _mm512_add_epi32(acc_hi,
+                    _mm512_cvtepi16_epi32(_mm512_extracti64x4_epi64(prod, 1)));
+            }
+            (void) acc;
+            // explicit fmadd: gcc contracts a mul/add intrinsic pair anyway, so the
+            // semantics are pinned rather than left to the optimiser
+            __m512 vlo = _mm512_fmadd_ps(_mm512_cvtepi32_ps(acc_lo), vscale, blo);
+            _mm512_mask_storeu_ps(out + t * C + c0, mlo, vlo);
+            vmax = _mm512_mask_max_ps(vmax, mlo, vmax, _mm512_and_ps(vlo, signmask));
+            if (mhi) {
+                __m512 vhi = _mm512_fmadd_ps(_mm512_cvtepi32_ps(acc_hi), vscale, bhi);
+                _mm512_mask_storeu_ps(out + t * C + c0 + 16, mhi, vhi);
+                vmax = _mm512_mask_max_ps(vmax, mhi, vmax, _mm512_and_ps(vhi, signmask));
+            }
+        }
+    }
+    return _mm512_reduce_max_ps(vmax);
+}
+
+#endif  // VIBEASR_HAS_AVX512_PATH
+
+float vibeasr_i8s_dwconv_absmax(const int8_t * x, const int8_t * w, const float * bias,
+                                int64_t C, int k, int64_t frames, int64_t t0, int64_t t1,
+                                float combined_scale, float * out) {
+#if defined(VIBEASR_HAS_AVX512_PATH)
+    if (vibeasr_isa() >= VIBEASR_ISA_AVX512 && k <= 16) {
+        return dwconv_avx512(x, w, bias, C, k, frames, t0, t1, combined_scale, out);
+    }
+#endif
+    float amax = 0.0f;
+    for (int64_t t = t0; t < t1; t++) {
+        for (int64_t c = 0; c < C; c++) {
+            int32_t sum = 0;
+            for (int j = 0; j < k; j++) {
+                const int64_t tt = t + j - (k - 1);
+                if (tt >= 0) sum += (int32_t) w[c * k + j] * (int32_t) x[tt * C + c];
+            }
+            const float v = fmaf((float) sum, combined_scale, bias[c]);
+            out[t * C + c] = v;
+            const float av = v < 0.0f ? -v : v;
+            if (av > amax) amax = av;
+        }
+    }
+    return amax;
+}
 
 float vibeasr_i8s_add_scaled_absmax(const int8_t * a, const int8_t * b,
                                     const float * gamma, int64_t gamma_ne0,
@@ -262,7 +359,7 @@ float vibeasr_i8s_add_scaled_absmax(const int8_t * a, const int8_t * b,
     float amax = 0.0f;
     for (int64_t i = 0; i < n; i++) {
         const float g = gamma_ne0 == 1 ? gamma[0] : gamma[(start + i) % ne0];
-        const float v = (float) a[i] * inv_a * g + (float) b[i] * inv_b;
+        const float v = fmaf((float) b[i], inv_b, (float) a[i] * inv_a * g);
         out[i] = v;
         const float av = v < 0.0f ? -v : v;
         if (av > amax) amax = av;
@@ -279,7 +376,7 @@ float vibeasr_i8s_dequant_absmax(const int32_t * acc, int64_t n, float scale,
 #endif
     float amax = 0.0f;
     for (int64_t i = 0; i < n; i++) {
-        float v = (float) acc[i] * scale + (bias ? bias[i] : bias_scalar);
+        float v = fmaf((float) acc[i], scale, bias ? bias[i] : bias_scalar);
         out[i] = v;
         float av = v < 0.0f ? -v : v;
         if (av > amax) amax = av;

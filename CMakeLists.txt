@@ -105,6 +105,11 @@ set_target_properties(asr_stream_server PROPERTIES
 # Links ggml so it exercises the same kernel objects inference uses.
 add_executable(kernel_bench bench/kernel_bench.cpp)
 
+# The scalar references state exact mul-then-add semantics; letting gcc contract
+# them to fma would make the "exact match" checks compare against a different
+# rounding than the one the deterministic runtime paths guarantee.
+set_source_files_properties(bench/kernel_bench.cpp PROPERTIES COMPILE_FLAGS "-ffp-contract=off")
+
 target_include_directories(kernel_bench PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/include

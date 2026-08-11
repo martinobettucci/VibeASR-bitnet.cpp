@@ -60,6 +60,23 @@ float vibeasr_i8s_add_scaled_absmax(const int8_t * a, const int8_t * b,
                                     int64_t ne0, int64_t start, int64_t n,
                                     float a_scale, float b_scale, float * out);
 
+// Layout-native causal depthwise conv over columns [t0, t1) of x [C, frames],
+// C contiguous: out[c + t*C] = sum_j w[c*k+j] * x[c + (t+j-k+1)*C] * combined_scale
+// + bias[c], zero-padded on the left. Returns max |out| over the span. Replaces the
+// permute/cont/im2col/matmul/cont chain of the ConvNeXt mixer.
+float vibeasr_i8s_dwconv_absmax(const int8_t * x, const int8_t * w, const float * bias,
+                                int64_t C, int k, int64_t frames, int64_t t0, int64_t t1,
+                                float combined_scale, float * out);
+
+// Graph builder for the dw_direct branch of GGML_OP_MUL_MAT_ADD: w [k,1,C] I8_S,
+// x [C, frames] I8_S (the ConvNeXt layout, unpermuted), bias F32 [C] -> I8_S
+// [C, frames]. Defined in the patched ggml.c.
+struct ggml_context;
+struct ggml_tensor * ggml_mul_mat_add_dw_direct(struct ggml_context * ctx,
+                                                struct ggml_tensor  * w,
+                                                struct ggml_tensor  * x,
+                                                struct ggml_tensor  * bias);
+
 // Optimized INT8 × INT8 vec_dot for n=4 (process 8 columns simultaneously)
 void ggml_vec_dot_i8_i8_n4_col8(
     int32_t * s, size_t bs,

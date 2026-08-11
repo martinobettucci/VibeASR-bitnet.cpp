@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG "CMakeFiles/llama-baby-llama.dir/baby-llama.cpp.o" -o ../../../../bin/llama-baby-llama  -Wl,-rpath,/home/user/VibeASR-bitnet.cpp/build2/3rdparty/llama.cpp/src:/home/user/VibeASR-bitnet.cpp/build2/3rdparty/llama.cpp/ggml/src: ../../common/libcommon.a ../../src/libllama.so ../../ggml/src/libggml.so 
