@@ -705,7 +705,25 @@ vae_model_t* vae_load_model_from_file(
     
     fclose(f);
     gguf_free(gguf_ctx);
-    
+
+    // Pre-pack the linear weights for the packed-B VNNI GEMM while we are still in
+    // model load: done lazily it lands inside the first clip's timed encode, and
+    // worse, serialised across threads. 2-D I8_S with ne0 % 32 == 0 is exactly the
+    // gate the runtime kernel applies; anything else is skipped there too.
+    {
+        int packed = 0;
+        for (std::map<std::string, struct ggml_tensor*>::iterator it = model->tensors.begin();
+             it != model->tensors.end(); ++it) {
+            struct ggml_tensor * t = it->second;
+            if (t && t->type == GGML_TYPE_I8_S && t->ne[1] > 1 &&
+                t->ne[2] == 1 && t->ne[3] == 1 && t->ne[0] % 32 == 0 && t->data) {
+                vibeasr_i8s_prepack(t->data, (int) t->ne[0], (int) t->ne[1]);
+                packed++;
+            }
+        }
+        fprintf(stderr, "[VAE] Pre-packed %d linear weight tensors for VNNI GEMM\n", packed);
+    }
+
     // Load encoder weights
     model->acoustic_encoder.tag = "acoustic";
     model->semantic_encoder.tag = "semantic";

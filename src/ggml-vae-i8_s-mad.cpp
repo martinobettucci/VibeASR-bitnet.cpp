@@ -1192,14 +1192,18 @@ const i8_pack * get_pack(const void * w, int n, int keff, int nc) {
         // masked store/absmax never sees them anyway.
         slot->data.assign((size_t) np * slot->k4 * 64, (int8_t) 0x80);
         const int8_t * src = (const int8_t *) w;
+        // Column-outer fill: reads walk each weight column contiguously, writes
+        // sweep one panel-sized region (<= k4*64 bytes, L2-resident) 16 times.
+        // The first cut iterated t-outer, whose reads hopped n bytes 16 times per
+        // 64-byte write -- packing then cost more than it saved.
         for (int p = 0; p < np; p++) {
-            for (int t = 0; t < slot->k4; t++) {
-                int8_t * dst = slot->data.data() + ((size_t) p * slot->k4 + t) * 64;
-                const int cmax = nc - p * 16 < 16 ? nc - p * 16 : 16;
-                for (int c = 0; c < cmax; c++) {
-                    const int8_t * col = src + (size_t)(p * 16 + c) * n + t * 4;
+            int8_t * pdst = slot->data.data() + (size_t) p * slot->k4 * 64;
+            const int cmax = nc - p * 16 < 16 ? nc - p * 16 : 16;
+            for (int c = 0; c < cmax; c++) {
+                const int8_t * col = src + (size_t)(p * 16 + c) * n;
+                for (int t = 0; t < slot->k4; t++) {
                     for (int b = 0; b < 4; b++) {
-                        dst[c * 4 + b] = (int8_t)(col[b] ^ (int8_t) 0x80);
+                        pdst[(size_t) t * 64 + c * 4 + b] = (int8_t)(col[t * 4 + b] ^ (int8_t) 0x80);
                     }
                 }
             }
@@ -1283,6 +1287,19 @@ VIBEASR_TGT_VNNI static float gemm_i8_f32_packed_vnni(
 }
 
 #endif  // VIBEASR_HAS_AVX512_PATH
+
+// Populate the pack cache at model-load time, so no clip pays the repack inside a
+// timed section. Safe to call on any candidate tensor; non-qualifying shapes are
+// ignored (the runtime gate in vibeasr_gemm_i8_f32 would skip them anyway).
+void vibeasr_i8s_prepack(const void * w, int n, int nc) {
+#if defined(VIBEASR_HAS_AVX512_PATH)
+    if (vibeasr_isa() >= VIBEASR_ISA_VNNI && n > 0 && n % QK_I8_S == 0 && nc > 0) {
+        (void) get_pack(w, n, n, nc);
+    }
+#else
+    (void) w; (void) n; (void) nc;
+#endif
+}
 
 float vibeasr_gemm_i8_f32(int n, const void * vx, const void * vy, int nr, int nc,
                           float combined_scale, const float * bias, float * out, int64_t ldc) {

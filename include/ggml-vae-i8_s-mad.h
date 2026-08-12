@@ -58,6 +58,11 @@ float vibeasr_gemm_i8_f32(int n, const void * vx, const void * vy, int nr, int n
                           float combined_scale, const float * bias, float * out,
                           int64_t ldc);
 
+// Build the packed-B copy of one weight tensor ahead of time (model load), so the
+// first clip does not pay the repack inside a timed compute section. No-op for
+// shapes the packed kernel would not take.
+void vibeasr_i8s_prepack(const void * w, int n, int nc);
+
 // out[i] = (int8) roundf(clamp(in[i]*inv_scale, -127, 127)); relu clamps at 0.
 void vibeasr_i8s_quant_i8(const float * in, int8_t * out, int64_t n,
                           float inv_scale, int relu);
