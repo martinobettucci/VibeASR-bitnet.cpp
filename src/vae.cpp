@@ -223,7 +223,22 @@ struct ConvNeXtBlock {
             const char * e = getenv("VIBEASR_DWCONV");
             return !(e && strcmp(e, "0") == 0);
         }();
-        if (is_i8s && dw_direct) {
+        // Residual fusion (VIBEASR_RES_FUSE=0 disables): the layer scale and
+        // residual add ride the producer's epilogue instead of a separate
+        // ADD_SCALED pass, skipping the quant->dequant round trip between them.
+        // Numerics change slightly (that round trip is the difference), so this
+        // is gated by WER measurement, not hash equality.
+        static const bool res_fuse = [](){
+            // Default OFF until the WER gate on the 100-clip suite decides;
+            // VIBEASR_RES_FUSE=1 enables.
+            const char * e = getenv("VIBEASR_RES_FUSE");
+            return e && strcmp(e, "1") == 0;
+        }();
+
+        if (is_i8s && dw_direct && res_fuse) {
+            x = ggml_mul_mat_add_dw_res(ctx, mixer_conv_weight, x, mixer_conv_bias,
+                                        residual, mixer_layer_scale);
+        } else if (is_i8s && dw_direct) {
             x = ggml_mul_mat_add_dw_direct(ctx, mixer_conv_weight, x, mixer_conv_bias);
         } else {
         x = ggml_cont(ctx, ggml_permute(ctx, x, 1, 0, 2, 3));
@@ -232,9 +247,9 @@ struct ConvNeXtBlock {
                                 /*stride=*/1, /*padding=*/kernel_size-1, /*dilation=*/1);
         }
 
-        if (is_i8s) {
+        if (is_i8s && !(dw_direct && res_fuse)) {
             x = ggml_add_scaled(ctx, x, residual, mixer_layer_scale);
-        } else {
+        } else if (!is_i8s) {
             // F32 path: x = x * layer_scale + residual
             x = ggml_mul(ctx, x, mixer_layer_scale);
             x = ggml_add(ctx, x, residual);
@@ -251,11 +266,20 @@ struct ConvNeXtBlock {
             x = ggml_gelu(ctx, x);
         }
         
-        x = ggml_nn_linear(ctx, x, ffn_fc2_weight, ffn_fc2_bias);
-
-        if (is_i8s) {
-            x = ggml_add_scaled(ctx, x, residual, ffn_layer_scale);
+        if (is_i8s && res_fuse) {
+            // fc2 with the FFN residual fused into its epilogue; the ADD_SCALED
+            // below is skipped for this path. Same 2-D flatten nn_linear applies
+            // (fc1 hands back [4C, 1, frames]).
+            x = ggml_reshape_2d(ctx, x, x->ne[0], x->ne[1] * x->ne[2]);
+            x = ggml_mul_mat_add_res(ctx, ffn_fc2_weight, x, ffn_fc2_bias,
+                                     residual, ffn_layer_scale);
         } else {
+            x = ggml_nn_linear(ctx, x, ffn_fc2_weight, ffn_fc2_bias);
+        }
+
+        if (is_i8s && !res_fuse) {
+            x = ggml_add_scaled(ctx, x, residual, ffn_layer_scale);
+        } else if (!is_i8s) {
             x = ggml_mul(ctx, x, ffn_layer_scale);
             x = ggml_add(ctx, x, residual);
         }

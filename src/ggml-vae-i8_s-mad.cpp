@@ -370,6 +370,58 @@ float vibeasr_i8s_add_scaled_absmax(const int8_t * a, const int8_t * b,
     return amax;
 }
 
+// Residual fusion epilogue: v[i] = v[i]*gamma[(start+i)%ne0] + res[i]/res_scale,
+// in place over the float buffer a producer just wrote (cache-warm), returning the
+// absmax the shared quantisation step needs. This replaces the ADD_SCALED graph op
+// AND the producer's own quantisation: the producer's float output goes straight
+// into the residual sum without a quant->dequant round trip. NOT bit-identical to
+// the unfused chain -- the round trip is exactly what it skips -- so it ships
+// behind a switch and a WER gate, not a hash check.
+#if defined(VIBEASR_HAS_AVX512_PATH)
+VIBEASR_TGT_AVX512 static float resid_apply_avx512(
+        float * v, const int8_t * res, const float * gamma,
+        int64_t ne0, int64_t n, float res_inv) {
+    const __m512 vinv = _mm512_set1_ps(res_inv);
+    const __m512 signmask = _mm512_castsi512_ps(_mm512_set1_epi32(0x7fffffff));
+    __m512 vmax = _mm512_setzero_ps();
+    int64_t i = 0;
+    while (i < n) {
+        const int64_t col = i % ne0;
+        const int64_t seg = (ne0 - col) < (n - i) ? (ne0 - col) : (n - i);
+        const int64_t take = seg < 16 ? seg : 16;
+        const __mmask16 m = take == 16 ? (__mmask16) 0xffff
+                                       : (__mmask16)((1u << take) - 1);
+        const __m512 g = _mm512_maskz_loadu_ps(m, gamma + col);
+        const __m512 r = _mm512_cvtepi32_ps(
+            _mm512_cvtepi8_epi32(_mm_maskz_loadu_epi8(m, res + i)));
+        __m512 x = _mm512_maskz_loadu_ps(m, v + i);
+        x = _mm512_add_ps(_mm512_mul_ps(x, g), _mm512_mul_ps(r, vinv));
+        _mm512_mask_storeu_ps(v + i, m, x);
+        vmax = _mm512_mask_max_ps(vmax, m, vmax, _mm512_and_ps(x, signmask));
+        i += take;
+    }
+    return _mm512_reduce_max_ps(vmax);
+}
+#endif
+
+float vibeasr_i8s_resid_apply(float * v, const int8_t * res, const float * gamma,
+                              int64_t ne0, int64_t n, float res_scale) {
+    const float res_inv = 1.0f / res_scale;
+#if defined(VIBEASR_HAS_AVX512_PATH)
+    if (vibeasr_isa() >= VIBEASR_ISA_AVX512) {
+        return resid_apply_avx512(v, res, gamma, ne0, n, res_inv);
+    }
+#endif
+    float amax = 0.0f;
+    for (int64_t i = 0; i < n; i++) {
+        const float x = v[i] * gamma[i % ne0] + (float) res[i] * res_inv;
+        v[i] = x;
+        const float ax = x < 0.0f ? -x : x;
+        if (ax > amax) amax = ax;
+    }
+    return amax;
+}
+
 float vibeasr_i8s_dequant_absmax(const int32_t * acc, int64_t n, float scale,
                                  const float * bias, float bias_scalar, float * out) {
 #if defined(VIBEASR_HAS_AVX512_PATH)

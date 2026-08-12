@@ -91,6 +91,29 @@ struct ggml_tensor * ggml_mul_mat_add_conv1d(struct ggml_context * ctx,
 void vibeasr_i8s_quant_i8(const float * in, int8_t * out, int64_t n,
                           float inv_scale, int relu);
 
+// Residual-fusion epilogue, in place over a producer's float output:
+//   v[i] = v[i]*gamma[i % ne0] + res[i]/res_scale; returns max |v|.
+// Replaces the ADD_SCALED op AND the producer's quantisation (the quant->dequant
+// round trip between them is skipped -- deliberately NOT bit-identical).
+float vibeasr_i8s_resid_apply(float * v, const int8_t * res, const float * gamma,
+                              int64_t ne0, int64_t n, float res_scale);
+
+// Graph builders for the residual-fused ops (patched ggml.c): the linear or
+// layout-native-depthwise mul_mat_add whose epilogue also applies the per-channel
+// layer scale and adds the residual before the shared requantisation.
+struct ggml_tensor * ggml_mul_mat_add_res(struct ggml_context * ctx,
+                                          struct ggml_tensor  * w,
+                                          struct ggml_tensor  * x,
+                                          struct ggml_tensor  * bias,
+                                          struct ggml_tensor  * residual,
+                                          struct ggml_tensor  * gamma);
+struct ggml_tensor * ggml_mul_mat_add_dw_res(struct ggml_context * ctx,
+                                             struct ggml_tensor  * w,
+                                             struct ggml_tensor  * x,
+                                             struct ggml_tensor  * bias,
+                                             struct ggml_tensor  * residual,
+                                             struct ggml_tensor  * gamma);
+
 // The ADD_SCALED body: out[i] = a[i]/a_scale * gamma + b[i]/b_scale over span
 // [start, start+n) of a tensor with row length ne0; returns max |out[i]|. Uniform
 // per element regardless of how callers chunk the span -- see the implementation
