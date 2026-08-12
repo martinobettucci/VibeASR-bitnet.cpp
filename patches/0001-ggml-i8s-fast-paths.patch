@@ -59,7 +59,7 @@ index 99f43c6..f03d62d 100644
  
  void ggml_gemm_q4_0_4x4_q8_0(int n, float * restrict s, size_t bs, const void * restrict vx, const void * restrict vy, int nr, int nc) {
 diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c
-index 23303be..386d737 100644
+index 23303be..848e696 100644
 --- a/ggml/src/ggml.c
 +++ b/ggml/src/ggml.c
 @@ -5809,6 +5809,37 @@ struct ggml_tensor * ggml_mul_mat_add(
@@ -335,10 +335,32 @@ index 23303be..386d737 100644
              }
          }
  
-@@ -19186,13 +19145,11 @@ static void ggml_compute_forward_mul_mat_add(
+@@ -19164,37 +19123,16 @@ static void ggml_compute_forward_mul_mat_add(
+         if (col0 < col1) {
+             const int64_t n_cols = col1 - col0;
  
-             // Convert int32 -> float with combined_scale + bias, store in float_buf
-             for (int64_t c = 0; c < n_cols; c++) {
+-            // Use pre-allocated int32 accumulator from work buffer
+-            int32_t * acc_base = (int32_t *)(thread_max + nth);
+-            int32_t * acc_buf = acc_base + col0 * ne01;
+-            memset(acc_buf, 0, n_cols * ne01 * sizeof(int32_t));
+-
+             const void * vx = (const void *)src0->data;
+             const void * vy = (const void *)((const char *)src1->data + col0 * nb11);
+ 
+-            ggml_gemv_t const gemv = type_traits[GGML_TYPE_I8_S].gemv;
+-            ggml_gemm_t const gemm = type_traits[GGML_TYPE_I8_S].gemm;
+-
+-            if (n_cols == 1) {
+-                ((void (*)(int, int32_t*, size_t, const void*, const void*, int, int))gemv)(
+-                    (int)ne00, acc_buf, (size_t)ne01, vx, vy, (int)n_cols, (int)ne01);
+-            } else {
+-                ((void (*)(int, int32_t*, size_t, const void*, const void*, int, int))gemm)(
+-                    (int)ne00, acc_buf, (size_t)ne01, vx, vy, (int)n_cols, (int)ne01);
+-            }
+-
+-
+-            // Convert int32 -> float with combined_scale + bias, store in float_buf
+-            for (int64_t c = 0; c < n_cols; c++) {
 -                int32_t * col_acc = acc_buf + c * ne01;
 -                for (int64_t oc = 0; oc < ne01; oc++) {
 -                    float val = (float)col_acc[oc] * combined_scale + bias_data[oc];
@@ -346,15 +368,19 @@ index 23303be..386d737 100644
 -                    float av = val < 0.0f ? -val : val;
 -                    if (av > local_absmax) local_absmax = av;
 -                }
-+                // vectorised epilogue (src/ggml-vae-i8_s-mad.cpp)
-+                const float amax = vibeasr_i8s_dequant_absmax(
-+                    acc_buf + c * ne01, ne01, combined_scale, bias_data, 0.0f,
-+                    float_buf + (col0 + c) * ne01);
-+                if (amax > local_absmax) local_absmax = amax;
-             }
- 
+-            }
+-
++            // Fused GEMM + dequant epilogue (src/ggml-vae-i8_s-mad.cpp): writes
++            // float_buf directly from the accumulators, so the int32 scratch, its
++            // memset and the separate dequant pass are gone. Bit-identical to the
++            // unfused sequence (VIBEASR_GEMM_PACKED=0 restores it).
++            local_absmax = vibeasr_gemm_i8_f32(
++                (int)ne00, vx, vy, (int)n_cols, (int)ne01, combined_scale,
++                bias_data, float_buf + col0 * ne01, (int64_t)ne01);
          }
-@@ -19219,13 +19176,10 @@ static void ggml_compute_forward_mul_mat_add(
+ 
+         // Store local absmax for this thread
+@@ -19219,13 +19157,10 @@ static void ggml_compute_forward_mul_mat_add(
          const float inv_scale = (global_max != 0.0f) ? 127.0f / global_max : 0.0f;
  
          if (col0 < col1) {
@@ -372,7 +398,7 @@ index 23303be..386d737 100644
          }
  
          // Thread 0 stores the per-tensor output scale
-@@ -19296,12 +19250,11 @@ static void ggml_compute_forward_mul_mat_add_relu(
+@@ -19296,12 +19231,11 @@ static void ggml_compute_forward_mul_mat_add_relu(
              }
  
              for (int64_t ch = 0; ch < C; ch++) {
@@ -390,7 +416,7 @@ index 23303be..386d737 100644
              }
          }
  
-@@ -19324,12 +19277,10 @@ static void ggml_compute_forward_mul_mat_add_relu(
+@@ -19324,12 +19258,10 @@ static void ggml_compute_forward_mul_mat_add_relu(
  
          if (col0 < col1) {
              for (int64_t ch = 0; ch < C; ch++) {
@@ -407,10 +433,29 @@ index 23303be..386d737 100644
              }
          }
  
-@@ -19372,13 +19323,11 @@ static void ggml_compute_forward_mul_mat_add_relu(
-             }
+@@ -19353,33 +19285,14 @@ static void ggml_compute_forward_mul_mat_add_relu(
+         if (col0 < col1) {
+             const int64_t n_cols = col1 - col0;
  
-             for (int64_t c = 0; c < n_cols; c++) {
+-            int32_t * acc_base = (int32_t *)(thread_max + nth);
+-            int32_t * acc_buf = acc_base + col0 * ne01;
+-            memset(acc_buf, 0, n_cols * ne01 * sizeof(int32_t));
+-
+             const void * vx = (const void *)src0->data;
+             const void * vy = (const void *)((const char *)src1->data + col0 * nb11);
+ 
+-            ggml_gemv_t const gemv = type_traits[GGML_TYPE_I8_S].gemv;
+-            ggml_gemm_t const gemm = type_traits[GGML_TYPE_I8_S].gemm;
+-
+-            if (n_cols == 1) {
+-                ((void (*)(int, int32_t*, size_t, const void*, const void*, int, int))gemv)(
+-                    (int)ne00, acc_buf, (size_t)ne01, vx, vy, (int)n_cols, (int)ne01);
+-            } else {
+-                ((void (*)(int, int32_t*, size_t, const void*, const void*, int, int))gemm)(
+-                    (int)ne00, acc_buf, (size_t)ne01, vx, vy, (int)n_cols, (int)ne01);
+-            }
+-
+-            for (int64_t c = 0; c < n_cols; c++) {
 -                int32_t * col_acc = acc_buf + c * ne01;
 -                for (int64_t oc = 0; oc < ne01; oc++) {
 -                    float val = (float)col_acc[oc] * combined_scale + bias_data[oc];
@@ -418,15 +463,16 @@ index 23303be..386d737 100644
 -                    float av = val < 0.0f ? -val : val;
 -                    if (av > local_absmax) local_absmax = av;
 -                }
-+                // vectorised epilogue (src/ggml-vae-i8_s-mad.cpp)
-+                const float amax = vibeasr_i8s_dequant_absmax(
-+                    acc_buf + c * ne01, ne01, combined_scale, bias_data, 0.0f,
-+                    float_buf + (col0 + c) * ne01);
-+                if (amax > local_absmax) local_absmax = amax;
-             }
+-            }
++            // Fused GEMM + dequant epilogue, as in mul_mat_add above; the relu is
++            // still applied at quantisation time so absmax semantics are unchanged.
++            local_absmax = vibeasr_gemm_i8_f32(
++                (int)ne00, vx, vy, (int)n_cols, (int)ne01, combined_scale,
++                bias_data, float_buf + col0 * ne01, (int64_t)ne01);
          }
  
-@@ -19400,14 +19349,10 @@ static void ggml_compute_forward_mul_mat_add_relu(
+         thread_max[ith] = local_absmax;
+@@ -19400,14 +19313,10 @@ static void ggml_compute_forward_mul_mat_add_relu(
          const float inv_scale = (global_max != 0.0f) ? 127.0f / global_max : 0.0f;
  
          if (col0 < col1) {
@@ -445,7 +491,7 @@ index 23303be..386d737 100644
          }
  
          if (ith == 0) {
-@@ -22114,6 +22059,61 @@ struct ggml_cplan ggml_graph_plan(
+@@ -22114,6 +22023,61 @@ struct ggml_cplan ggml_graph_plan(
      return cplan;
  }
  
@@ -507,7 +553,7 @@ index 23303be..386d737 100644
  static thread_ret_t ggml_graph_compute_thread(void * data) {
      struct ggml_compute_state * state = (struct ggml_compute_state *) data;
      struct ggml_threadpool    * tp    = state->threadpool;
-@@ -22134,6 +22134,14 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
+@@ -22134,6 +22098,14 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
      for (int node_n = 0; node_n < cgraph->n_nodes && !tp->abort; node_n++) {
          struct ggml_tensor * node = cgraph->nodes[node_n];
  
@@ -522,7 +568,7 @@ index 23303be..386d737 100644
          ggml_compute_forward(&params, node);
  
          if (state->ith == 0 && cplan->abort_callback &&
-@@ -22143,6 +22151,17 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
+@@ -22143,6 +22115,17 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
          }
  
          ggml_barrier(state->threadpool);

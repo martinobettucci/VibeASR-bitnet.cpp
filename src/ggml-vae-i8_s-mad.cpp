@@ -3,6 +3,9 @@
 #include <assert.h>
 #include <cmath>
 #include <cstring>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
 #include "ggml-vae-i8_s-mad.h"
 #include "ggml-cpu-impl.h"
 #include "lm-config.h"
@@ -1071,6 +1074,16 @@ void ggml_gemm_i8_i8_tiled(int n, int32_t * s, size_t bs, const void * vx, const
                            int nr, int nc) {
     VIBEASR_PROBE(VIBEASR_K_I8_GEMM, (uint64_t) n * (uint64_t) nr * (uint64_t) nc);
 
+    // Shape census (VIBEASR_GEMM_SHAPES=1): one line per call, aggregated offline.
+    // Temporary instrumentation for tile tuning; costs one getenv-once branch.
+    static const int dump_shapes = []() {
+        const char * e = getenv("VIBEASR_GEMM_SHAPES");
+        return e && !strcmp(e, "1");
+    }();
+    if (dump_shapes) {
+        fprintf(stderr, "GEMMSHAPE k=%d nr=%d nc=%d\n", n, nr, nc);
+    }
+
 #if defined(VIBEASR_HAS_AVX512_PATH)
     // VIBEASR_GEMM_TILE=0 takes the fallback while leaving the vec_dot kernels on
     // their VNNI path, so the tile can be A/B'd against exactly what it replaces.
@@ -1113,6 +1126,210 @@ void ggml_gemm_i8_i8_tiled(int n, int32_t * s, size_t bs, const void * vx, const
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Packed-B VNNI GEMM with the dequant epilogue fused into the accumulator store.
+//
+// The register-tiled GEMM above still pays two structural costs that the shape
+// census (VIBEASR_GEMM_SHAPES=1) showed dominating the VAE:
+//
+//   * 16 horizontal reduce_adds per 4x4 tile. For the early encoder stages K is
+//     32..512 bytes, so the reductions cost more than the vpdpbusd work they
+//     finalise. And K=32 fails the tile's K%64 gate outright, dropping the single
+//     tallest stage-0 matmul (nr ~ 50k) onto the slow vec_dot path.
+//   * The result then takes two more full passes: an int32 store+memset, and a
+//     separate dequant+absmax re-read before quantisation.
+//
+// This kernel removes both. Weights are repacked once per tensor (they are static)
+// into the layout vpdpbusd natively consumes: per 16-column panel, 64-byte vectors
+// where lane c holds 4 consecutive K-bytes of column panel*16+c, pre-flipped by
+// +128 to satisfy the instruction's unsigned operand. The inner loop broadcasts 4
+// activation bytes and accumulates 16 output channels vertically -- no horizontal
+// reduction anywhere, and K only needs to be a multiple of 4. The +128 flip is
+// corrected with -128*rowsum(activation) per row, one splat-subtract.
+//
+// Because the 16 outputs of a panel land contiguously in one register, the
+// int32->float scale+bias+absmax epilogue happens right there before the store,
+// writing float_buf directly: the int32 buffer, its memset, and the dequant pass
+// disappear. The float sequence is instruction-identical to dequant_absmax_avx512
+// (cvt, fmadd against the loaded bias, and+max), so results are bit-exact with the
+// unfused path; VIBEASR_GEMM_PACKED=0 takes that path for A/B.
+//
+// Loop order adapts to what should stay cache-resident: row-blocks outer while the
+// whole packed weight matrix fits comfortably in L2 (the tall early-stage shapes,
+// where activations stream once), panels outer when it does not (the K=8192
+// stage-5/6 and connector shapes, where weights stream once and the few activation
+// rows re-read from cache).
+// ---------------------------------------------------------------------------
+
+extern "C" void ggml_gemv_i8_i8(int n, int32_t * s, size_t bs, const void * vx,
+                                const void * vy, int nr, int nc);
+extern "C" void ggml_gemm_i8_i8(int n, int32_t * s, size_t bs, const void * vx,
+                                const void * vy, int nr, int nc);
+
+namespace {
+
+struct i8_pack {
+    std::vector<int8_t> data;   // [npanel][k4][64], lanes pre-flipped to unsigned
+    int k4;
+    int nc;
+};
+
+std::mutex pack_mtx;
+std::unordered_map<const void *, std::unique_ptr<i8_pack>> pack_map;
+
+const i8_pack * get_pack(const void * w, int n, int keff, int nc) {
+    std::lock_guard<std::mutex> lk(pack_mtx);
+    std::unique_ptr<i8_pack> & slot = pack_map[w];
+    if (!slot) {
+        slot.reset(new i8_pack());
+        slot->k4 = keff / 4;
+        slot->nc = nc;
+        const int np = (nc + 15) / 16;
+        // Padding lanes hold flipped zero (0x80): they accumulate exactly the
+        // 128*rowsum the correction subtracts, so they read back as 0.0f and the
+        // masked store/absmax never sees them anyway.
+        slot->data.assign((size_t) np * slot->k4 * 64, (int8_t) 0x80);
+        const int8_t * src = (const int8_t *) w;
+        for (int p = 0; p < np; p++) {
+            for (int t = 0; t < slot->k4; t++) {
+                int8_t * dst = slot->data.data() + ((size_t) p * slot->k4 + t) * 64;
+                const int cmax = nc - p * 16 < 16 ? nc - p * 16 : 16;
+                for (int c = 0; c < cmax; c++) {
+                    const int8_t * col = src + (size_t)(p * 16 + c) * n + t * 4;
+                    for (int b = 0; b < 4; b++) {
+                        dst[c * 4 + b] = (int8_t)(col[b] ^ (int8_t) 0x80);
+                    }
+                }
+            }
+        }
+    } else {
+        assert(slot->k4 == keff / 4 && slot->nc == nc);
+    }
+    return slot.get();
+}
+
+}  // namespace
+
+#if defined(VIBEASR_HAS_AVX512_PATH)
+
+VIBEASR_TGT_VNNI static float gemm_i8_f32_packed_vnni(
+        const i8_pack * pk, const int8_t * acts, size_t stride,
+        int keff, int nr, int nc,
+        float scale, const float * bias, float * out, size_t ldc,
+        int32_t * rowsum) {
+    const int k4 = keff / 4;
+    const int np = (nc + 15) / 16;
+    const __m512i ones = _mm512_set1_epi8(1);
+    const __m512  vscale = _mm512_set1_ps(scale);
+    const __m512  signmask = _mm512_castsi512_ps(_mm512_set1_epi32(0x7fffffff));
+    __m512 vmax = _mm512_setzero_ps();
+
+    // Signed row sums of the activations, for the +128 weight-flip correction.
+    // Masked full width on the tail, as everywhere else (integer, so this is about
+    // uniformity of code paths, not rounding).
+    for (int r = 0; r < nr; r++) {
+        const int8_t * a = acts + (size_t) r * stride;
+        __m512i acc = _mm512_setzero_si512();
+        int i = 0;
+        for (; i + 64 <= keff; i += 64) {
+            acc = _mm512_dpbusd_epi32(acc, ones, _mm512_loadu_si512((const void *)(a + i)));
+        }
+        if (i < keff) {
+            const __mmask64 m = (~0ULL) >> (64 - (keff - i));
+            acc = _mm512_dpbusd_epi32(acc, ones, _mm512_maskz_loadu_epi8(m, a + i));
+        }
+        rowsum[r] = _mm512_reduce_add_epi32(acc);
+    }
+
+    const bool rows_outer = (size_t) np * k4 * 64 <= (size_t) 768 * 1024;
+
+    const int o_end = rows_outer ? nr : np;
+    const int i_end = rows_outer ? np : nr;
+    for (int o = 0; o < o_end; o += rows_outer ? 4 : 1) {
+        for (int i = 0; i < i_end; i += rows_outer ? 1 : 4) {
+            const int r0 = rows_outer ? o : i;
+            const int p  = rows_outer ? i : o;
+            const int rm = (nr - r0) < 4 ? (nr - r0) : 4;
+
+            const int8_t * pw = pk->data.data() + (size_t) p * k4 * 64;
+            __m512i acc[4];
+            for (int j = 0; j < 4; j++) acc[j] = _mm512_setzero_si512();
+
+            for (int t = 0; t < k4; t++) {
+                const __m512i wv = _mm512_loadu_si512((const void *)(pw + (size_t) t * 64));
+                for (int j = 0; j < rm; j++) {
+                    int32_t d;
+                    memcpy(&d, acts + (size_t)(r0 + j) * stride + (size_t) t * 4, 4);
+                    acc[j] = _mm512_dpbusd_epi32(acc[j], wv, _mm512_set1_epi32(d));
+                }
+            }
+
+            const int ctail = nc - p * 16;
+            const __mmask16 m = ctail >= 16 ? (__mmask16) 0xffff
+                                            : (__mmask16)((1u << ctail) - 1);
+            const __m512 vb = _mm512_maskz_loadu_ps(m, bias + p * 16);
+            for (int j = 0; j < rm; j++) {
+                const __m512i s32 = _mm512_sub_epi32(acc[j], _mm512_set1_epi32(128 * rowsum[r0 + j]));
+                __m512 v = _mm512_cvtepi32_ps(s32);
+                v = _mm512_fmadd_ps(v, vscale, vb);
+                _mm512_mask_storeu_ps(out + (size_t)(r0 + j) * ldc + p * 16, m, v);
+                vmax = _mm512_mask_max_ps(vmax, m, vmax, _mm512_and_ps(v, signmask));
+            }
+        }
+    }
+    return _mm512_reduce_max_ps(vmax);
+}
+
+#endif  // VIBEASR_HAS_AVX512_PATH
+
+float vibeasr_gemm_i8_f32(int n, const void * vx, const void * vy, int nr, int nc,
+                          float combined_scale, const float * bias, float * out, int64_t ldc) {
+    VIBEASR_PROBE(VIBEASR_K_I8_GEMM, (uint64_t) n * (uint64_t) nr * (uint64_t) nc);
+
+#if defined(VIBEASR_HAS_AVX512_PATH)
+    static const int packed_on = []() {
+        const char * e = getenv("VIBEASR_GEMM_PACKED");
+        return !(e && !strcmp(e, "0"));
+    }();
+    // Only where the old path's semantics were "whole QK_I8_S blocks": for n not a
+    // multiple of 32, ggml_gemm_i8_i8 dispatches small-n kernels (n = 2/4/8/16 --
+    // the downsample convs) that DO consume every byte, so those must keep going
+    // through it. Every shape in the census (VIBEASR_GEMM_SHAPES=1) has n % 32 == 0.
+    const int keff = (n / QK_I8_S) * QK_I8_S;
+    if (packed_on && vibeasr_isa() >= VIBEASR_ISA_VNNI && keff == n && n > 0 && bias != NULL) {
+        const i8_pack * pk = get_pack(vx, n, keff, nc);
+        thread_local std::vector<int32_t> rowsum;
+        if ((int) rowsum.size() < nr) rowsum.resize(nr);
+        return gemm_i8_f32_packed_vnni(pk, (const int8_t *) vy, (size_t) n,
+                                       keff, nr, nc, combined_scale, bias,
+                                       out, (size_t) ldc, rowsum.data());
+    }
+#endif
+
+    // Unfused fallback: exactly the sequence the call sites used to run inline --
+    // GEMM (or gemv for one row) into an int32 scratch, then the vectorised
+    // dequant+absmax pass per row.
+    thread_local std::vector<int32_t> acc;
+    if ((int64_t) acc.size() < (int64_t) nr * nc) acc.resize((int64_t) nr * nc);
+    memset(acc.data(), 0, (size_t) nr * nc * sizeof(int32_t));
+    if (nr == 1) {
+        ggml_gemv_i8_i8(n, acc.data(), nc, vx, vy, nr, nc);
+    } else {
+        // The type-traits gemm, NOT _tiled directly: it owns the small-n dispatch
+        // (n = 2/4/8/16) whose kernels consume every byte where the 32-byte-block
+        // kernels would consume none.
+        ggml_gemm_i8_i8(n, acc.data(), nc, vx, vy, nr, nc);
+    }
+    float amax = 0.0f;
+    for (int r = 0; r < nr; r++) {
+        const float a = vibeasr_i8s_dequant_absmax(acc.data() + (size_t) r * nc, nc,
+                                                   combined_scale, bias, 0.0f,
+                                                   out + (size_t) r * ldc);
+        if (a > amax) amax = a;
+    }
+    return amax;
 }
 
 void ggml_vec_dot_i8_i8(int n, int32_t * s, size_t bs, const void * vx, size_t bx, const void * vy, size_t by, int nrc) {

@@ -47,6 +47,17 @@ void ggml_gemm_i8_i8_tiled(int n, int32_t * s, size_t bs, const void * vx, const
 float vibeasr_i8s_dequant_absmax(const int32_t * acc, int64_t n, float scale,
                                  const float * bias, float bias_scalar, float * out);
 
+// Fused GEMM + dequant epilogue for the I8_S linear ops:
+//   out[r*ldc + c] = dot(vy row r, vx column c) * combined_scale + bias[c]
+// over nr activation rows and nc weight columns; returns max |out| over the block.
+// On VNNI hosts this runs a packed-B kernel (weights repacked once per tensor,
+// cached) whose epilogue writes float directly from the accumulators -- the int32
+// intermediate, its memset and the separate dequant pass all disappear; results are
+// bit-identical to the unfused sequence, which VIBEASR_GEMM_PACKED=0 restores.
+float vibeasr_gemm_i8_f32(int n, const void * vx, const void * vy, int nr, int nc,
+                          float combined_scale, const float * bias, float * out,
+                          int64_t ldc);
+
 // out[i] = (int8) roundf(clamp(in[i]*inv_scale, -127, 127)); relu clamps at 0.
 void vibeasr_i8s_quant_i8(const float * in, int8_t * out, int64_t n,
                           float inv_scale, int relu);
