@@ -78,6 +78,7 @@ clip's language code (generous: this model runs unhinted):
 |:--|--:|--:|--:|--:|--:|--:|--:|--:|
 | Upstream engine, original 1.70 GB | 16.7 | 6.6 | 5.8 | 32.7 | 21.6 | 8.3 | 10.8 | **15.75** |
 | **This repo (slim), fork engine** | 13.9 | 7.2 | 5.8 | 35.4 | 21.2 | 10.2 | 10.5 | **16.03** |
+| This repo, fork engine + residual fusion (default) | 15.6 | 6.6 | 7.1 | 33.6 | 21.9 | 8.6 | 11.1 | **16.07** |
 | whisper.cpp small q5_1 | 8.5 | 4.6 | 7.1 | 12.9 | 16.7 | 6.6 | 8.0 | **9.92** |
 | whisper.cpp large-v3-turbo q5_0 | 4.1 | 3.7 | 4.0 | 3.3 | 10.3 | 3.3 | 4.3 | **5.12** |
 
@@ -109,9 +110,10 @@ languages degrade sharply; this repack does not change language coverage.
 
 Documented in the runtime repo, not here — it is a property of the code, and
 absolute RTF is a property of the host, so speed is published as **ratios**
-between engines measured back-to-back: **2.56× faster than the upstream runtime**
-(paired per-clip median, 100 clips, identical weights class), parity with
-whisper-small on long clips and 1.76× faster below 8 s. Achieved via VNNI kernels
+between engines measured back-to-back: **≈3.0× faster than the upstream runtime**
+(2.56× paired per-clip median over 100 clips, × 1.17× from the residual-fusion
+default gated at +0.04 WER above), ~1.25× faster than whisper-small overall and
+1.76× faster below 8 s of audio even before fusion. Achieved via VNNI kernels
 with a packed-B INT8 GEMM (fused dequantisation epilogue), conv-as-GEMM
 downsampling, and a layout-native depthwise convolution. Tables, profiler
 methodology, and full reproduction scripts:

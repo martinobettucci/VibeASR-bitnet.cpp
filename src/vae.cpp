@@ -229,10 +229,12 @@ struct ConvNeXtBlock {
         // Numerics change slightly (that round trip is the difference), so this
         // is gated by WER measurement, not hash equality.
         static const bool res_fuse = [](){
-            // Default OFF until the WER gate on the 100-clip suite decides;
-            // VIBEASR_RES_FUSE=1 enables.
+            // Default ON: the 100-clip WER gate measured +0.04 corpus WER
+            // (16.07 vs 16.03, per-language scatter both ways) for 1.17x corpus
+            // speed (VAE stages 1.35x/1.19x in same-window A/B).
+            // VIBEASR_RES_FUSE=0 restores the unfused chain.
             const char * e = getenv("VIBEASR_RES_FUSE");
-            return e && strcmp(e, "1") == 0;
+            return !(e && strcmp(e, "0") == 0);
         }();
 
         if (is_i8s && dw_direct && res_fuse) {

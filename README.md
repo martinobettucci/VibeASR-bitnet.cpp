@@ -114,6 +114,10 @@ compute only (model load excluded), paired per clip:
 | whisper.cpp large-v3-turbo q5_0 | 1.6 GB → 574 MB q5 | 3.94× slower | much better |
 | whisper.cpp small q5_1 | 190 MB q5 | 1.07× (parity) | better |
 
+After this table was measured, the residual-fusion default (below) added a further
+**1.17× paired** at +0.04 WER; chained, that puts the fork at **≈3.0× the upstream
+engine** and ~1.25× faster than whisper-small overall.
+
 WER columns are summarised deliberately — per-language accuracy tables live on the
 [model card](https://huggingface.co/P2Enjoy/VibeVoice-ASR-BitNet-slim), which is
 the accuracy authority for these weights. Two honest notes in both directions:
@@ -167,6 +171,15 @@ stage) drove every optimisation. The headline findings, in the order they were f
    stride of s·IC — and the [C,T]→[T,C] transpose feeding each conv dies with it
    (12 of 14 im2col nodes and all 14 per-stage transposes). VAE 1.44× on top of
    everything above; bit-exact (`VIBEASR_CONV_GEMM=0`).
+8. **Residual fusion — the one deliberate numerics change.** Every ConvNeXt block
+   half ended with ADD_SCALED: quantise the mixer/FFN output, re-read it,
+   dequantise, apply the layer scale, add the residual. Fused into the producer's
+   epilogue (in place over the cache-warm float buffer), only the *sum* is
+   quantised — one DRAM round trip and one quant→dequant round trip per block half
+   gone. Not bit-exact by construction, so it was gated on the 100-clip suite:
+   **+0.04 corpus WER** (16.07 vs 16.03, per-language scatter in both directions)
+   for acoustic 1.35× / semantic 1.19×. Default on; `VIBEASR_RES_FUSE=0` restores
+   the exact chain.
 
 ### Determinism
 
