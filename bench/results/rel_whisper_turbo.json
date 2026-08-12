@@ -1,0 +1,1017 @@
+{
+ "summary": {
+  "tag": "rel_whisper_turbo",
+  "threads": 4,
+  "clips": 100,
+  "model": "/home/user/whisper.cpp/models/ggml-large-v3-turbo-q5_0.bin",
+  "audio_sec": 1307.5,
+  "compute_sec": 2588.57,
+  "rtf_corpus": 1.9797894760994268,
+  "rtf_median": 2.0558016339214857,
+  "rtf_p10": 1.3187250950113052,
+  "rtf_p90": 3.3748147007342895,
+  "wall_sec": 2660.8
+ },
+ "records": [
+  {
+   "lang": "en_us",
+   "wav": "0000.wav",
+   "duration": 8.38,
+   "compute_ms": 25155.39,
+   "rtf": 3.0018365155131264,
+   "hyp": "Alloys are basically a mixture of two or more metals. Don't forget there are many elements on the PRI cable.",
+   "ref": "alloys are basically a mixture of two or more metals don't forget that there are many elements on the periodic table",
+   "load_ms": 4157.24
+  },
+  {
+   "lang": "fr_fr",
+   "wav": "0000.wav",
+   "duration": 7.32,
+   "compute_ms": 24690.29,
+   "rtf": 3.37299043715847,
+   "hyp": "Tous les noms suivis du mot « si » qui signifie « vous » commencent toujours par une majuscule, même au milieu d'une phrase.",
+   "ref": "tous les noms suivis du mot sie qui signifie vous commencent toujours par une majuscule même au milieu d'une phrase",
+   "load_ms": 403.87
+  },
+  {
+   "lang": "it_it",
+   "wav": "0000.wav",
+   "duration": 9.54,
+   "compute_ms": 24804.35,
+   "rtf": 2.6000366876310275,
+   "hyp": "Secondo il sovrintendente della polizia Chandra Sekar Solanki, gli imputati sono apparsi in tribunale con il volto coperto.",
+   "ref": "secondo il sovrintendente della polizia chandra shekhar solanki gli imputati sono apparsi in tribunale con il volto coperto",
+   "load_ms": 380.31
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0000.wav",
+   "duration": 10.68,
+   "compute_ms": 26257.219999999998,
+   "rtf": 2.4585411985018726,
+   "hyp": "O romantismo tinha um grande elemento de determinismo cultural, extraído de escritores como Goethe, Fichte e Skellige.",
+   "ref": "o romantismo tinha um grande elemento de determinismo cultural extraído de escritores como goethe fichte e schlegel",
+   "load_ms": 364.7
+  },
+  {
+   "lang": "es_419",
+   "wav": "0000.wav",
+   "duration": 12.96,
+   "compute_ms": 25275.25,
+   "rtf": 1.9502507716049382,
+   "hyp": "No se trata, sin embargo, de una experimentación. Es una prueba que se usa para descartar una o más de las posibles hipótesis haciendo preguntas y observaciones que guían la investigación científica.",
+   "ref": "no se trata sin embargo de una experimentación es una prueba que se usa para descartar una o más de las posibles hipótesis haciendo preguntas y observaciones que guían la investigación científica",
+   "load_ms": 4452.94
+  },
+  {
+   "lang": "de_de",
+   "wav": "0000.wav",
+   "duration": 10.68,
+   "compute_ms": 30252.22,
+   "rtf": 2.8326048689138577,
+   "hyp": "Dem League zufolge bezieht sich das Dokument auf den Grenzstreit, in dem die Palästinenser ein Zurücksetzen der Grenzen in den Zustand vor dem Sechstagekrieg von 1967 fordern.",
+   "ref": "dem leak zufolge bezieht sich das dokument auf den grenzstreit in dem die palästinenser ein zurücksetzen der grenzen in den zustand vor dem sechstagekrieg von 1967 fordern",
+   "load_ms": 371.64
+  },
+  {
+   "lang": "fr_mls",
+   "wav": "0000.wav",
+   "duration": 16.49,
+   "compute_ms": 26389.510000000002,
+   "rtf": 1.6003341419041845,
+   "hyp": "Pendant le second siècle, je fis serment d'ouvrir tous les trésors de la terre à quiconque me mettrait en liberté, mais je ne fus pas plus heureux. Dans le troisième, je promis de faire puissant monarque mon libérateur, d'être toujours près de lui en esprit.",
+   "ref": "pendant le second siècle je fis serment d'ouvrir tous les trésors de la terre à quiconque me mettrait en liberté mais je ne fus pas plus heureux dans le troisième je promis de faire puissant monarque mon libérateur d'être toujours près de lui en esprit",
+   "load_ms": 379.48
+  },
+  {
+   "lang": "en_us",
+   "wav": "0001.wav",
+   "duration": 14.22,
+   "compute_ms": 24597.120000000003,
+   "rtf": 1.7297552742616036,
+   "hyp": "Generally speaking, two behaviors can emerge as managers begin to lead their former peers. One end of the spectrum is trying to remain one of the guys, or gals.",
+   "ref": "generally speaking two behaviors can emerge as managers begin to lead their former peers. one end of the spectrum is trying to remain  one of the guys” or gals",
+   "load_ms": 374.44
+  },
+  {
+   "lang": "fr_fr",
+   "wav": "0001.wav",
+   "duration": 8.1,
+   "compute_ms": 24652.8,
+   "rtf": 3.043555555555556,
+   "hyp": "Par exemple, le format de photographie le plus courant du monde est le 35 mm. C'était le format de pellicule le plus répandu à la fin de l'ère des films analogiques.",
+   "ref": "par exemple le format de photographie le plus courant au monde est le 35 mm c'était le format de pellicule le plus répandu à la fin de l'ère des films analogiques",
+   "load_ms": 369.5
+  },
+  {
+   "lang": "it_it",
+   "wav": "0001.wav",
+   "duration": 17.88,
+   "compute_ms": 25514.64,
+   "rtf": 1.426993288590604,
+   "hyp": "L'iniziativa contro le uscinità è stata finanziata dal congresso a partire dall'anno fiscale 2005, con la specifica richiesta all'FBI di assegnare 10 agenti alla pornografia per adulti.",
+   "ref": "l'iniziativa contro le oscenità è stata finanziata dal congresso a partire dall'anno fiscale 2005 con la specifica richiesta all'fbi di assegnare 10 agenti alla pornografia per adulti",
+   "load_ms": 369.46
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0001.wav",
+   "duration": 9.24,
+   "compute_ms": 24199.2,
+   "rtf": 2.618961038961039,
+   "hyp": "Ele não definiu um valor para os cortes, falando que eles serão feitos de acordo com a produção econômica da China.",
+   "ref": "ele não definiu um valor para os cortes falando que eles serão feitos de acordo com a produção econômica da china",
+   "load_ms": 359.79
+  },
+  {
+   "lang": "es_419",
+   "wav": "0001.wav",
+   "duration": 15.72,
+   "compute_ms": 25438.07,
+   "rtf": 1.618197837150127,
+   "hyp": "Desde siempre, la función de la Marina ha sido garantizar que su país conserve la facultad de trasladar a su población y mercancías, a la vez que interfiere con la capacidad del enemigo para hacer lo propio.",
+   "ref": "desde siempre la función de la marina ha sido garantizar que su país conserve la facultad de trasladar a su población y mercancías a la vez que interfiere con la capacidad del enemigo para hacer lo propio",
+   "load_ms": 369.82
+  },
+  {
+   "lang": "de_de",
+   "wav": "0001.wav",
+   "duration": 21.12,
+   "compute_ms": 27100.59,
+   "rtf": 1.2831718749999999,
+   "hyp": "Ihr thermisches Verhalten ist nicht so gleichmäßig wie das großer Höhlen auf der Erde, die oft eine ziemlich konstante Temperatur haben, aber es stimmt damit überein, dass es sich um tiefe Löcher am Boden handelt, sagt Glenn Cushing vom Astrogeologie-Team des United States Geological Survey, USGS und der Northern Arizona University in Flagstaff, Arizona.",
+   "ref": "\"ihr thermisches verhalten ist nicht so gleichmäßig wie das großer höhlen auf der erde die oft eine ziemlich konstante temperatur haben aber es stimmt damit überein dass es sich um tiefe löcher im boden handelt\" sagte glen cushing vom astrogeologie-team des united states geological survey usgs und der northern arizona university in flagstaff arizona.",
+   "load_ms": 367.92
+  },
+  {
+   "lang": "fr_mls",
+   "wav": "0001.wav",
+   "duration": 19.3,
+   "compute_ms": 27512.32,
+   "rtf": 1.4255088082901552,
+   "hyp": "« Non, ta mort est certaine, » dit le génie. « Choisis seulement de quelle sorte tu veux que je te fasse mourir. » Le pêcheur, le voyant dans les résolutions de le tuer, en eut une douleur extrême, non pas tant pour l'amour de lui qu'à cause de ses trois enfants dont il plaignait la misère où ils allaient être réduits par sa mort.",
+   "ref": "non ta mort est certaine dit le génie choisis seulement de quelle sorte tu veux que je te fasse mourir le pêcheur le voyant dans la résolution de le tuer en eut une douleur extrême non pas tant pour l'amour de lui qu'à cause de ses trois enfants dont il plaignait la misère où ils allaient être réduits par sa mort",
+   "load_ms": 398.19
+  },
+  {
+   "lang": "en_us",
+   "wav": "0002.wav",
+   "duration": 5.64,
+   "compute_ms": 24436.25,
+   "rtf": 4.332668439716312,
+   "hyp": "In some areas, boiling water for a minute is enough and other several minutes are needed.",
+   "ref": "in some areas boiling water for a minute is enough in others several minutes are needed",
+   "load_ms": 372.55
+  },
+  {
+   "lang": "fr_fr",
+   "wav": "0002.wav",
+   "duration": 23.4,
+   "compute_ms": 27438.739999999998,
+   "rtf": 1.1725957264957265,
+   "hyp": "Nous sommes d'accord avec la déclaration de l'USOC, Comité Olympique des Etats-Unis, selon laquelle les intérêts de nos athlètes et de nos clubs, ainsi que de leur sport, pourraient être mieux servis. Cela peut être fait en allant de l'avant et en procédant plutôt à des changements significatifs au sein de notre organisation qu'à la révocation d'accréditation.",
+   "ref": "nous sommes d'accord avec la déclaration de l'usoc comité olympique des états-unis selon laquelle les intérêts de nos athlètes et de nos clubs ainsi que de leur sport pourraient être mieux servis. cela peut être fait en allant de l'avant et en procédant plutôt à des changements significatifs au sein de notre organisation qu'à la révocation d'accréditation",
+   "load_ms": 370.06
+  },
+  {
+   "lang": "it_it",
+   "wav": "0002.wav",
+   "duration": 14.16,
+   "compute_ms": 25779.100000000002,
+   "rtf": 1.82055790960452,
+   "hyp": "L'iniziativa contro le uscinità è stata finanziata dal congresso a partire dall'anno fiscale 2005, con la specifica richiesta all'FBI di assegnare 10 agenti alla pornografia per adulti.",
+   "ref": "l'iniziativa contro le oscenità è stata finanziata dal congresso a partire dall'anno fiscale 2005 con la specifica richiesta all'fbi di assegnare 10 agenti alla pornografia per adulti",
+   "load_ms": 389.17
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0002.wav",
+   "duration": 12.48,
+   "compute_ms": 25173.57,
+   "rtf": 2.0171129807692307,
+   "hyp": "O Congresso começou a financiar a iniciativa de obscenidade no ano fiscal de 2005 e especificou que o FBI deve dedicar 10 agentes à pornografia adulta.",
+   "ref": "o congresso começou a financiar a iniciativa de obscenidade no ano fiscal de 2005 e especificou que o fbi deve dedicar 10 agentes à pornografia adulta",
+   "load_ms": 383.04
+  },
+  {
+   "lang": "es_419",
+   "wav": "0002.wav",
+   "duration": 7.68,
+   "compute_ms": 24470.26,
+   "rtf": 3.1862317708333334,
+   "hyp": "No ha podido tomarse medicamentos para aliviar el dolor porque está prohibido su uso en los juegos",
+   "ref": "no ha podido tomarse medicamentos para aliviar el dolor porque está prohibido su uso en los juegos",
+   "load_ms": 374.91
+  },
+  {
+   "lang": "de_de",
+   "wav": "0002.wav",
+   "duration": 16.02,
+   "compute_ms": 25035.6,
+   "rtf": 1.5627715355805243,
+   "hyp": "In seinem Artikel \"Die Rede des Präsidenten\" zeigte Oliver Sacks auf, wie Leute, die wegen eines Hirnschadens keine Sprache mehr verstehen können, trotzdem die Ehrlichkeit von Menschen richtig einschätzen können.",
+   "ref": "in seinem artikel die rede des präsidenten zeigte oliver sacks auf wie leute die wegen eines hirnschadens keine sprache mehr verstehen können trotzdem die ehrlichkeit von menschen richtig einschätzen können",
+   "load_ms": 390.45
+  },
+  {
+   "lang": "fr_mls",
+   "wav": "0002.wav",
+   "duration": 12.66,
+   "compute_ms": 26122.829999999998,
+   "rtf": 2.0634146919431275,
+   "hyp": "Dénarzade, la nuit suivante, appela sa sœur quand il en fut temps. « Si vous ne dormez pas, ma sœur, lui dit-elle, je vous prie, en attendant le jour qui paraîtra bientôt, de continuer le conte du pêcheur. »",
+   "ref": "la nuit suivante appela sa soeur quand il en fut temps si vous ne dormez pas ma soeur lui dit-elle je vous prie en attendant le jour qui paraîtra bientôt de continuer le conte du pêcheur",
+   "load_ms": 372.95
+  },
+  {
+   "lang": "en_us",
+   "wav": "0003.wav",
+   "duration": 8.76,
+   "compute_ms": 24091.41,
+   "rtf": 2.7501609589041096,
+   "hyp": "All nouns alongside the words say for you always begin with a capital letter, even in the middle of a sentence.",
+   "ref": "all nouns alongside the word sie for you always begin with a capital letter even in the middle of a sentence",
+   "load_ms": 381.1
+  },
+  {
+   "lang": "fr_fr",
+   "wav": "0003.wav",
+   "duration": 7.68,
+   "compute_ms": 26044.670000000002,
+   "rtf": 3.391233072916667,
+   "hyp": "Les deux composés réagissent l'un avec l'autre pour former des cristaux qui peuvent bloquer la fonction rénale, ont déclaré des chercheurs de l'université.",
+   "ref": "les deux composés réagissent l'un avec l'autre pour former des cristaux qui peuvent bloquer la fonction rénale ont déclaré des chercheurs de l'université",
+   "load_ms": 374.05
+  },
+  {
+   "lang": "it_it",
+   "wav": "0003.wav",
+   "duration": 14.7,
+   "compute_ms": 26507.940000000002,
+   "rtf": 1.803261224489796,
+   "hyp": "Un atleta completo. La tigre è in grado di arrampicarsi, seppure non troppo bene, nuotare, fare salti molto lunghi ed esercitare una forza di trazione 5 volte superiore a quella di un uomo forte.",
+   "ref": "un atleta completo: la tigre è in grado di arrampicarsi seppure non troppo bene nuotare fare salti molto lunghi ed esercitare una forza di trazione cinque volte superiore a quella di un uomo forte",
+   "load_ms": 391.17
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0003.wav",
+   "duration": 10.86,
+   "compute_ms": 25181.0,
+   "rtf": 2.318692449355433,
+   "hyp": "Cuidado para não deixar o tecido esquentar muito, o que pode fazê-lo encolher ou, em casos mais graves, causar queimaduras.",
+   "ref": "cuidado para não deixar o tecido esquentar muito o que pode fazê-lo encolher ou em casos mais graves causar queimaduras",
+   "load_ms": 384.42
+  },
+  {
+   "lang": "es_419",
+   "wav": "0003.wav",
+   "duration": 11.16,
+   "compute_ms": 25124.15,
+   "rtf": 2.2512679211469533,
+   "hyp": "En 1990 fue incorporado al listado de lugares del patrimonio de la humanidad en riesgo, producto de la amenaza de las arenas del desierto.",
+   "ref": "en 1990 fue incorporado al listado de lugares del patrimonio de la humanidad en riesgo producto de la amenaza de las arenas del desierto",
+   "load_ms": 382.26
+  },
+  {
+   "lang": "de_de",
+   "wav": "0003.wav",
+   "duration": 10.68,
+   "compute_ms": 26067.05,
+   "rtf": 2.4407350187265915,
+   "hyp": "Es leben noch viele Männer und Frauen, die ihre Zeit hier überlebt haben und viele weitere Mitangehörigen, die dort ermordet wurden oder sich zu Tode arbeiteten, Juden und Nichtjuden gleichermaßen.",
+   "ref": "es leben noch viele männer und frauen die ihre zeit hier überlebt haben und viele weitere mit angehörigen die dort ermordet wurden oder sich zu tode arbeiteten juden und nichtjuden gleichermaßen",
+   "load_ms": 378.48
+  },
+  {
+   "lang": "fr_mls",
+   "wav": "0003.wav",
+   "duration": 10.67,
+   "compute_ms": 25889.14,
+   "rtf": 2.426348641049672,
+   "hyp": "à l'aspect d'un monstre d'une grandeur si démesurée le pêcheur voulut prendre la fuite mais il se trouva si troublé et si effrayé qu'il ne put marcher salomon",
+   "ref": "à l'aspect d'un monstre d'une grandeur si démesurée le pêcheur voulut prendre la fuite mais il se trouva si troublé et si effrayé qu'il ne put marcher salomon",
+   "load_ms": 377.39
+  },
+  {
+   "lang": "en_us",
+   "wav": "0004.wav",
+   "duration": 12.78,
+   "compute_ms": 27896.050000000003,
+   "rtf": 2.18278951486698,
+   "hyp": "Oliver Sacks, in his paper, The President's Speech, indicated how people who are unable to understand speech because of brain damage are nevertheless able to assess sincerity accurately.",
+   "ref": "oliver sacks in his paper the president's speech indicated how people who are unable to understand speech because of brain damage are nevertheless able to assess sincerity accurately",
+   "load_ms": 383.19
+  },
+  {
+   "lang": "fr_fr",
+   "wav": "0004.wav",
+   "duration": 7.2,
+   "compute_ms": 25419.010000000002,
+   "rtf": 3.5304180555555558,
+   "hyp": "Martelly a intronisé hier un nouveau conseil électoral provisoire CEP composé de 9 membres.",
+   "ref": "martelly a intronisé hier un nouveau conseil électoral provisoire cep composé de neuf membres",
+   "load_ms": 5940.37
+  },
+  {
+   "lang": "it_it",
+   "wav": "0004.wav",
+   "duration": 16.32,
+   "compute_ms": 26066.8,
+   "rtf": 1.5972303921568627,
+   "hyp": "ci sono ancora molti uomini e donne sopravvissuti a questi luoghi e molti altri che hanno visto i propri cari assassinati o fatti lavorare fino alla morte sia ebrei che nonne",
+   "ref": "ci sono ancora molti uomini e donne sopravvissuti a questi luoghi e molti altri che hanno visto i propri cari assassinati o fatti lavorare fino alla morte sia ebrei che non",
+   "load_ms": 380.34
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0004.wav",
+   "duration": 9.12,
+   "compute_ms": 33142.24,
+   "rtf": 3.6340175438596494,
+   "hyp": "Há taxas para a entrada e conservação do parque, assim como acontece com todos os parques nacionais da África do Sul.",
+   "ref": "há taxas para entrada e conservação do parque assim como acontece com todos os parques nacionais da áfrica do sul",
+   "load_ms": 396.9
+  },
+  {
+   "lang": "es_419",
+   "wav": "0004.wav",
+   "duration": 14.88,
+   "compute_ms": 25808.64,
+   "rtf": 1.7344516129032257,
+   "hyp": "El 15 de agosto de 1940 se desplegó la denominada Operación Dragón, a través de la cual los aliados invadieron el sur de Francia.",
+   "ref": "el 15 de agosto de 1940 se desplegó la denominada «operación dragón» a través de la cual los aliados invadieron el sur de francia",
+   "load_ms": 395.93
+  },
+  {
+   "lang": "de_de",
+   "wav": "0004.wav",
+   "duration": 14.04,
+   "compute_ms": 25557.82,
+   "rtf": 1.82035754985755,
+   "hyp": "Es leben noch viele Männer und Frauen, die ihre Zeit hier überlebt haben und viele weitere mit Angehörigen, die dort ermordet wurden, oder sich zu Tode arbeiteten. Juden und Nichtjuden gleichermaßen.",
+   "ref": "es leben noch viele männer und frauen die ihre zeit hier überlebt haben und viele weitere mit angehörigen die dort ermordet wurden oder sich zu tode arbeiteten juden und nichtjuden gleichermaßen",
+   "load_ms": 366.19
+  },
+  {
+   "lang": "fr_mls",
+   "wav": "0004.wav",
+   "duration": 18.08,
+   "compute_ms": 26273.07,
+   "rtf": 1.4531565265486728,
+   "hyp": "Le sultan, qui n'avait pas moins d'envie que Dinarzade d'entendre la fin de ce compte, différa encore la mort de la sultane. Fin de la dixième nuit. Cet enregistrement fait partie du domaine public.",
+   "ref": "le sultan qui n'avait pas moins d'envie que dinarzade d'entendre la fin de ce conte différa encore la mort de la sultane fin de la dixième nuit cet enregistrement fait partie du domaine public",
+   "load_ms": 356.54
+  },
+  {
+   "lang": "en_us",
+   "wav": "0005.wav",
+   "duration": 10.2,
+   "compute_ms": 24937.0,
+   "rtf": 2.444803921568628,
+   "hyp": "A well-rounded athlete, the tiger can climb, though not well, swim, leap great distances, and pull with five times the force of a strong human.",
+   "ref": "a well rounded athlete the tiger can climb though not well swim leap great distances and pull with five times the force of a strong human",
+   "load_ms": 364.69
+  },
+  {
+   "lang": "fr_fr",
+   "wav": "0005.wav",
+   "duration": 14.58,
+   "compute_ms": 25153.05,
+   "rtf": 1.7251748971193417,
+   "hyp": "La semaine dernière, le METI a annoncé qu'Apple avait informé de 34 accidents de surchauffe supplémentaires que la société a qualifiés de non graves.",
+   "ref": "la semaine dernière le meti a annoncé qu’apple l’avait informé de 34 incidents de surchauffe supplémentaires que la société a qualifiés de « non graves »",
+   "load_ms": 384.91
+  },
+  {
+   "lang": "it_it",
+   "wav": "0005.wav",
+   "duration": 11.52,
+   "compute_ms": 25632.829999999998,
+   "rtf": 2.225072048611111,
+   "hyp": "Per alcuni tragitti le società più grandi utilizzano i propri aerei, ma per altre rotte e nel caso di società più piccole emergevano dei problemi.",
+   "ref": "per alcuni tragitti le società più grandi utilizzano i propri aerei ma per altre rotte e nel caso di società più piccole emergevano dei problemi",
+   "load_ms": 397.36
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0005.wav",
+   "duration": 20.28,
+   "compute_ms": 26058.83,
+   "rtf": 1.2849521696252464,
+   "hyp": "Embora ninguém saiba ao certo quem a escreveu, é sabido que, no início de sua existência, o grande documento de pergaminho, ele mede 29 ¾ polegadas por 24 ½ polegadas, foi enrolado para ser armazenado.",
+   "ref": "embora ninguém saiba ao certo quem a escreveu é sabido que no início de sua existência o grande documento de pergaminho ele mede 29¾ polegadas por 24½ polegadas foi enrolado para ser armazenado",
+   "load_ms": 397.25
+  },
+  {
+   "lang": "es_419",
+   "wav": "0005.wav",
+   "duration": 10.92,
+   "compute_ms": 25028.27,
+   "rtf": 2.291966117216117,
+   "hyp": "Esta es una de las atracciones más importantes de Sudáfrica y se la reconoce como ícono principal de los parques nacionales de Sudáfrica, Sun Parks.",
+   "ref": "esta es una de las atracciones más importantes de sudáfrica y se la reconoce como ícono principal de los parques nacionales de sudáfrica sanparks",
+   "load_ms": 367.52
+  },
+  {
+   "lang": "de_de",
+   "wav": "0005.wav",
+   "duration": 22.08,
+   "compute_ms": 25172.54,
+   "rtf": 1.1400606884057973,
+   "hyp": "Zum Beispiel ist das weltweit am weitesten verbreitete Standbildformat 35 mm, was der vorherrschenden Filmgröße am Ende der Analogfilm-Ära entspricht.",
+   "ref": "zum beispiel ist das weltweit am weitesten verbreitete standbildformat 35 mm was der vorherrschenden filmgröße am ende der analogfilmära entspricht",
+   "load_ms": 380.11
+  },
+  {
+   "lang": "fr_mls",
+   "wav": "0005.wav",
+   "duration": 13.59,
+   "compute_ms": 25688.54,
+   "rtf": 1.890253127299485,
+   "hyp": "« S'écria d'abord le génie, Salomon, grand prophète de Dieu, pardon, pardon, jamais je ne m'opposerai à vos volontés. J'obéirai à tous vos commandements. »",
+   "ref": "s'écria d'abord le génie salomon grand prophète de dieu pardon pardon jamais je ne m'opposerai à vos volontés j'obéirai à tous vos commandements scheherazade apercevant le jour interrompit là son conte",
+   "load_ms": 381.95
+  },
+  {
+   "lang": "en_us",
+   "wav": "0006.wav",
+   "duration": 13.92,
+   "compute_ms": 24307.11,
+   "rtf": 1.746200431034483,
+   "hyp": "For example, the most common still image photography format in the world is 35mm, which was the dominant film size at the close of the analog film era.",
+   "ref": "for example the most common still image photography format in the world is 35mm which was the dominant film size at the close of the analog film era",
+   "load_ms": 381.42
+  },
+  {
+   "lang": "fr_fr",
+   "wav": "0006.wav",
+   "duration": 10.44,
+   "compute_ms": 25471.29,
+   "rtf": 2.439778735632184,
+   "hyp": "Ces théories examinent ce qui pousse certaines personnes à vouloir les choses qu'elles font et ce qui, dans leur environnement, les pousse à faire ou à ne pas faire certaines choses.",
+   "ref": "ces théories examinent ce qui pousse certaines personnes à vouloir les choses qu'elles font et ce qui dans leur environnement les pousse à faire ou à ne pas faire certaines choses",
+   "load_ms": 370.93
+  },
+  {
+   "lang": "it_it",
+   "wav": "0006.wav",
+   "duration": 20.46,
+   "compute_ms": 24963.25,
+   "rtf": 1.2201001955034212,
+   "hyp": "I ricercatori dell'università hanno affermato che i due composti reagiscono tra loro formando dei cristalli che possono ostacolare la funzionalità renale.",
+   "ref": "i ricercatori dell'università hanno affermato che i due composti reagiscono tra loro formando dei cristalli che possono ostacolare la funzionalità renale",
+   "load_ms": 405.81
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0006.wav",
+   "duration": 14.46,
+   "compute_ms": 25204.28,
+   "rtf": 1.743034578146611,
+   "hyp": "Como exemplo, a forma de fotografia de imagem estática mais comum no planeta é a de 35mm, que era o tamanho de filme que mais tinha em circulação no fim da era do filme analógico.",
+   "ref": "como exemplo a forma de fotografia de imagem estática mais comum no planeta é a de 35 mm que era o tamanho de filme que mais tinha em circulação no fim da era do filme analógico",
+   "load_ms": 375.58
+  },
+  {
+   "lang": "es_419",
+   "wav": "0006.wav",
+   "duration": 13.98,
+   "compute_ms": 25789.04,
+   "rtf": 1.8447095851216022,
+   "hyp": "UNE ha renunciado y Ed Davey MP lo reemplazará en el gabinete. Se espera que Norman Lamb MP asuma el puesto de ministro de negocios que Davey deja vacante.",
+   "ref": "huhne ha renunciado y ed davey mp lo reemplazará en el gabinete se espera que norman lamb mp asuma el puesto de ministro de negocios que davey deja vacante",
+   "load_ms": 400.87
+  },
+  {
+   "lang": "de_de",
+   "wav": "0006.wav",
+   "duration": 8.64,
+   "compute_ms": 25319.670000000002,
+   "rtf": 2.9305173611111113,
+   "hyp": "Am 15. August 1940 fielen die Alliierten in Südfrankreich ein. Die Invasion wurde Operation Dragoon genannt.",
+   "ref": "am 15. august 1940 fielen die alliierten in südfrankreich ein die invasion wurde operation dragoon genannt",
+   "load_ms": 378.92
+  },
+  {
+   "lang": "fr_mls",
+   "wav": "0006.wav",
+   "duration": 17.05,
+   "compute_ms": 26197.269999999997,
+   "rtf": 1.536496774193548,
+   "hyp": "seigneur vous savez que je ne jette mes filets que quatre fois chaque jour je les ai déjà jetés trois fois sans avoir tiré le moindre fruit de mon travail il ne m'en reste plus qu'une je vous supplie de me rendre le maire favorable comme vous l'avez rendu à moïse",
+   "ref": "seigneur vous savez que je ne jette mes filets que quatre fois chaque jour je les ai déjà jetés trois fois sans avoir tiré le moindre fruit de mon travail il ne m'en reste plus qu'une je vous supplie de me rendre la mer favorable comme vous l'avez rendue à moïse",
+   "load_ms": 385.99
+  },
+  {
+   "lang": "en_us",
+   "wav": "0007.wav",
+   "duration": 10.62,
+   "compute_ms": 24758.8,
+   "rtf": 2.3313370998116763,
+   "hyp": "Goats seem to have been first domesticated roughly 10,000 years ago in the Zagros Mountains of Iran.",
+   "ref": "goats seem to have been first domesticated roughly 10,000 years ago in the zagros mountains of iran",
+   "load_ms": 372.8
+  },
+  {
+   "lang": "fr_fr",
+   "wav": "0007.wav",
+   "duration": 10.08,
+   "compute_ms": 26603.87,
+   "rtf": 2.6392728174603173,
+   "hyp": "Bien que Goma soit raisonnablement sûr, toute visite à l'extérieur de Goma doit faire l'objet de recherche pour comprendre l'état des combats qui persistent dans la province du nord Kivu.",
+   "ref": "bien que goma soit raisonnablement sûre toute visite à l'extérieur de goma doit faire l'objet de recherches pour comprendre l'état des combats qui persistent dans la province du nord-kivu",
+   "load_ms": 396.65
+  },
+  {
+   "lang": "it_it",
+   "wav": "0007.wav",
+   "duration": 16.2,
+   "compute_ms": 26200.94,
+   "rtf": 1.617341975308642,
+   "hyp": "Dal 1966 le Sundarbans sono diventate un santuario per la fauna selvatica. Nell'area si stima la presenza di 400 tigri reali del Bengala e di circa 30.000 cervi immaculati.",
+   "ref": "dal 1966 le sundarbans sono diventate un santuario per la fauna selvatica nell'area si stima la presenza di 400 tigri reali del bengala e di circa 30.000 cervi maculati",
+   "load_ms": 399.52
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0007.wav",
+   "duration": 8.52,
+   "compute_ms": 24303.21,
+   "rtf": 2.8524894366197184,
+   "hyp": "A segregação e a recombinação misturam a variação entre as duas bases com cada geração.",
+   "ref": "a segregação e a recombinação misturam a variação entre as duas bases com cada geração",
+   "load_ms": 362.27
+  },
+  {
+   "lang": "es_419",
+   "wav": "0007.wav",
+   "duration": 14.76,
+   "compute_ms": 25758.15,
+   "rtf": 1.7451321138211382,
+   "hyp": "El satélite fue enviado al espacio a través de un cohete. Los científicos utilizan telescopios en el espacio dado que la luz de la atmósfera de la Terra distorsiona parte de la luz y vista que tenemos.",
+   "ref": "el satélite fue enviado al espacio a través de un cohete los científicos utilizan telescopios en el espacio dado que la luz de la atmósfera de la terra distorsiona parte de la luz y vista que tenemos",
+   "load_ms": 381.37
+  },
+  {
+   "lang": "de_de",
+   "wav": "0007.wav",
+   "duration": 22.98,
+   "compute_ms": 25625.02,
+   "rtf": 1.115100957354221,
+   "hyp": "Die Sundarbans sind seit 1966 ein Naturschutzgebiet und Schätzungen zufolge halten sich dort mittlerweile 400 bengalische Königstiger und etwa 30.000 gefleckte Hirsche auf.",
+   "ref": "die sundarbans sind seit 1966 ein naturschutzgebiet und schätzungen zufolge halten sich dort mittlerweile 400 bengalische königstiger und etwa 30.000 gefleckte hirsche auf",
+   "load_ms": 378.73
+  },
+  {
+   "lang": "fr_mls",
+   "wav": "0007.wav",
+   "duration": 16.23,
+   "compute_ms": 29200.05,
+   "rtf": 1.7991404805914972,
+   "hyp": "« Rien n'est plus surprenant que l'histoire du pêcheur, répondit la sultane, et vous en conviendrez la nuit prochaine si le sultan me fait la grâce de me laisser vivre. »",
+   "ref": "rien n'est plus surprenant que l'histoire du pêcheur répondit la sultane et vous en conviendrez la nuit prochaine si le sultan me fait la grâce de me laisser vivre schahriar curieux d'apprendre le succès de la pêche du pêcheur ne voulut pas faire mourir ce jour-là scheherazade",
+   "load_ms": 389.66
+  },
+  {
+   "lang": "en_us",
+   "wav": "0008.wav",
+   "duration": 10.12,
+   "compute_ms": 24217.78,
+   "rtf": 2.3930612648221343,
+   "hyp": "On August 15, 1940, the Allies invaded southern France and the invasion was called Operation Dragoon.",
+   "ref": "on 15 august 1940 the allies invaded southern france the invasion was called operation dragoon",
+   "load_ms": 5795.49
+  },
+  {
+   "lang": "fr_fr",
+   "wav": "0008.wav",
+   "duration": 9.78,
+   "compute_ms": 34696.159999999996,
+   "rtf": 3.547664621676892,
+   "hyp": "Le satellite a été envoyé dans l'espace par une fusée. Les scientifiques utilisent des télescopes dans l'espace parce que l'atmosphère terrestre déforme une partie de notre lumière et de notre vision.",
+   "ref": "le satellite a été envoyé dans l'espace par une fusée les scientifiques utilisent des télescopes dans l'espace parce que l'atmosphère terrestre déforme une partie de notre lumière et de notre vision",
+   "load_ms": 396.18
+  },
+  {
+   "lang": "it_it",
+   "wav": "0008.wav",
+   "duration": 22.8,
+   "compute_ms": 26192.97,
+   "rtf": 1.1488144736842105,
+   "hyp": "Il lancio del satellite nello spazio è stato effettuato con un razzo. Gli scienziati ricorrono ai telescopi spaziali perché l'atmosfera della Terra distorce in parte la luce e la visuale.",
+   "ref": "il lancio del satellite nello spazio è stato effettuato con un razzo gli scienziati ricorrono ai telescopi spaziali perché l'atmosfera della terra distorce in parte la luce e la visuale",
+   "load_ms": 423.62
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0008.wav",
+   "duration": 20.1,
+   "compute_ms": 25532.53,
+   "rtf": 1.2702751243781092,
+   "hyp": "Concordamos com a declaração do USOC de que os interesses de nossos atletas e clubes e seus esportes podem ser melhor servidos ao avançarmos com mudanças significativas dentro de nossa organização, ao invés da desertificação.",
+   "ref": "concordamos com a declaração do usoc de que os interesses de nossos atletas e clubes e seus esportes podem ser melhor servidos ao avançarmos com mudanças significativas dentro de nossa organização ao invés da descertificação",
+   "load_ms": 389.16
+  },
+  {
+   "lang": "es_419",
+   "wav": "0008.wav",
+   "duration": 10.32,
+   "compute_ms": 24578.46,
+   "rtf": 2.3816337209302323,
+   "hyp": "El color del jugo de repollo se verá alterado en función de cuán ácida o básica alcalina sea la sustancia química.",
+   "ref": "el color del jugo de repollo se verá alterado en función de cuán ácida o básica alcalina sea la sustancia química",
+   "load_ms": 391.73
+  },
+  {
+   "lang": "de_de",
+   "wav": "0008.wav",
+   "duration": 23.04,
+   "compute_ms": 25691.38,
+   "rtf": 1.1150772569444445,
+   "hyp": "Während Goma einigermaßen sicher ist, sollte jeder Aufenthalt außer Gomas sorgfältig geplant werden, um den Stand der in der Provinz Nordkivu andauernden Kämpfe zu erfahren.",
+   "ref": "während goma einigermaßen sicher ist sollte jeder aufenthalt außerhalb gomas sorgfältig geplant werden um den stand der in der provinz nord-kivu andauernden kämpfe zu erfahren",
+   "load_ms": 379.3
+  },
+  {
+   "lang": "fr_mls",
+   "wav": "0008.wav",
+   "duration": 16.85,
+   "compute_ms": 27533.43,
+   "rtf": 1.6340314540059346,
+   "hyp": "A ce discours, le génie, regardant le pêcheur d'un air fier, lui répondit, « Parle-moi plus civilement, tu es bien ardi de m'appeler l'esprit superbe. » « Eh bien, » repartit le pêcheur, « vous parlerai-je avec plus de civilité en vous appelant hibou du bonheur ? »",
+   "ref": "à ce discours le génie regardant le pêcheur d'un air fier lui répondit parle-moi plus civilement tu es bien hardi de m'appeler esprit superbe eh bien repartit le pêcheur vous parlerai-je avec plus de civilité en vous appelant hibou du bonheur",
+   "load_ms": 393.05
+  },
+  {
+   "lang": "en_us",
+   "wav": "0009.wav",
+   "duration": 9.12,
+   "compute_ms": 24840.2,
+   "rtf": 2.7237061403508775,
+   "hyp": "Last week, Medi announced that Apple had informed it of 34 additional overheating incidents, which the company called Non-Serious.",
+   "ref": "last week meti announced that apple had informed it of 34 additional overheating incidents which the company called non-serious",
+   "load_ms": 376.7
+  },
+  {
+   "lang": "fr_fr",
+   "wav": "0009.wav",
+   "duration": 5.04,
+   "compute_ms": 24391.35,
+   "rtf": 4.839553571428572,
+   "hyp": "Le chocolat chaud est conforme aux normes belges. Les jus de fruits sont chers mais excellents.",
+   "ref": "le chocolat chaud est conforme aux normes belges les jus de fruits sont chers mais excellents",
+   "load_ms": 374.4
+  },
+  {
+   "lang": "it_it",
+   "wav": "0009.wav",
+   "duration": 16.74,
+   "compute_ms": 27352.25,
+   "rtf": 1.6339456391875748,
+   "hyp": "In metropolitana gli annunci ordinari sono solo in catalano. Eventuali interruzioni del servizio non programmate vengono comunicate in un'ampia varietà di lingue tra cui spagnolo, inglese, francese, arabo e giapponese, grazie a un sistema automatico.",
+   "ref": "in metropolitana gli annunci ordinari sono solo in catalano eventuali interruzioni del servizio non programmate vengono comunicate in un'ampia varietà di lingue tra cui spagnolo inglese francese arabo e giapponese grazie a un sistema automatico",
+   "load_ms": 372.41
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0009.wav",
+   "duration": 11.4,
+   "compute_ms": 25143.379999999997,
+   "rtf": 2.2055596491228067,
+   "hyp": "Os dois compostos reagem um com o outro para formar cristais, que podem bloquear a função renal, afirmaram os pesquisadores da universidade.",
+   "ref": "os dois compostos reagem um com o outro para formar cristais que podem bloquear a função renal afirmaram os pesquisadores da universidade",
+   "load_ms": 400.4
+  },
+  {
+   "lang": "es_419",
+   "wav": "0009.wav",
+   "duration": 24.96,
+   "compute_ms": 26637.35,
+   "rtf": 1.0672015224358973,
+   "hyp": "Por ejemplo, todos los años los alumnos de la escuela Bennet en Carolina del Norte diseñan una página web acerca de su viaje a la capital del estado y cada año la página se actualiza pero se conservan en línea las versiones previas en la forma de álbum de recuerdos.",
+   "ref": "por ejemplo todos los años los alumnos de la escuela bennet en carolina del norte diseñan una página web acerca de su viaje a la capital del estado y cada año la página se actualiza pero se conservan en línea las versiones previas que en la forma de álbum de recuerdos",
+   "load_ms": 380.77
+  },
+  {
+   "lang": "de_de",
+   "wav": "0009.wav",
+   "duration": 16.68,
+   "compute_ms": 25743.649999999998,
+   "rtf": 1.5433842925659471,
+   "hyp": "Der Satellit wurde von einer Rakete ins Weltall befördert. Wissenschaftler verwenden Teleskope im Weltall, weil die Erdatmosphäre unser Licht und unseren Blick etwas verzerrt.",
+   "ref": "der satellit wurde von einer rakete ins weltall befördert wissenschaftler verwenden teleskope im weltall weil die erdatmosphäre unser licht und unseren blick etwas verzerrt",
+   "load_ms": 405.83
+  },
+  {
+   "lang": "fr_mls",
+   "wav": "0009.wav",
+   "duration": 16.06,
+   "compute_ms": 26967.089999999997,
+   "rtf": 1.6791463262764632,
+   "hyp": "lui fit penser qu'il devait être rempli de quelque chose de précieux pour s'en éclaircir il prit son couteau et avec un peu de peine il l'ouvrit il en pencha aussitôt l'ouverture contre terre mais il n'en sortit rien ce qui le surprit extrêmement",
+   "ref": "lui fit penser qu'il devait être rempli de quelque chose de précieux pour s'en éclaircir il prit son couteau et avec un peu de peine il l'ouvrit il en pencha aussitôt l'ouverture contre terre mais il n'en sortit rien ce qui le surprit extrêmement",
+   "load_ms": 380.08
+  },
+  {
+   "lang": "en_us",
+   "wav": "0010.wav",
+   "duration": 15.56,
+   "compute_ms": 25037.010000000002,
+   "rtf": 1.6090623393316197,
+   "hyp": "These theories look at what it is about certain people that make them want the things that they do and what things in their environment will make them do or not do certain things.",
+   "ref": "these theories look at what it is about certain people that make them want the things that they do and what things in their environment will make them do or not do certain things",
+   "load_ms": 372.1
+  },
+  {
+   "lang": "fr_fr",
+   "wav": "0010.wav",
+   "duration": 10.74,
+   "compute_ms": 25536.940000000002,
+   "rtf": 2.3777411545623837,
+   "hyp": "Sa réputation en tant qu'épicentre du luxe a débuté aux environs de l'an 400 et a duré jusqu'à 1100 environ.",
+   "ref": "sa réputation en tant qu'épicentre du luxe a débuté aux environs de l'an 400 et duré jusqu'à 1100 environ",
+   "load_ms": 372.89
+  },
+  {
+   "lang": "it_it",
+   "wav": "0010.wav",
+   "duration": 17.28,
+   "compute_ms": 26415.71,
+   "rtf": 1.5286869212962961,
+   "hyp": "Gli scienziati hanno potuto desumere che gli effetti della materia oscura su altra materia oscura sono gli stessi effetti che alla materia normale.",
+   "ref": "gli scienziati hanno potuto desumere che gli effetti della materia oscura su altra materia oscura sono gli stessi effetti che ha la materia normale",
+   "load_ms": 386.39
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0010.wav",
+   "duration": 16.56,
+   "compute_ms": 26081.75,
+   "rtf": 1.5749849033816425,
+   "hyp": "A cidade de Bisquerque era descrita como se estivesse afundando num estado de anarquia, de acordo com um observador, já que mutirões de pessoas andavam pelas ruas e saqueavam as lojas de bens de consumo.",
+   "ref": "a cidade de bisqueque era descrita como se estivesse afundando num estado de anarquia de acordo com um observador já que mutirões de pessoas andavam pelas ruas e saqueavam as lojas de bens de consumo",
+   "load_ms": 380.15
+  },
+  {
+   "lang": "es_419",
+   "wav": "0010.wav",
+   "duration": 16.68,
+   "compute_ms": 26092.75,
+   "rtf": 1.5643135491606714,
+   "hyp": "Los autobuses parten de la estación entre distritos al otro lado del río durante todo el día, aunque la mayoría, en especial los que viajan al este y a Yacar, también llamados Bortan, salen entre las seis y media y las siete horas.",
+   "ref": "los autobuses parten de la estación entre distritos al otro lado del río durante todo el día aunque la mayoría en especial los que viajan al este y a jakar también llamada bumthang salen entre las 6:30 y las 7:30 h",
+   "load_ms": 384.72
+  },
+  {
+   "lang": "de_de",
+   "wav": "0010.wav",
+   "duration": 13.08,
+   "compute_ms": 25936.910000000003,
+   "rtf": 1.982944189602447,
+   "hyp": "Normale Durchsagen erfolgen in der Metro ausschließlich auf Katalanisch, aber unvorhergesehene Störungen werden von einem automatisierten System in einer Vielzahl von Sprachen gemeldet, darunter Spanisch, Englisch, Französisch, Arabisch und Japanisch.",
+   "ref": "normale durchsagen erfolgen in der metro ausschließlich auf katalanisch aber unvorhergesehene störungen werden von einem automatisierten system in einer vielzahl von sprachen gemeldet darunter spanisch englisch französisch arabisch und japanisch",
+   "load_ms": 370.17
+  },
+  {
+   "lang": "fr_mls",
+   "wav": "0010.wav",
+   "duration": 12.78,
+   "compute_ms": 26175.850000000002,
+   "rtf": 2.0481885758998435,
+   "hyp": "« Je te dis, repartit le génie, de me parler plus civilement avant que je te tue. » « Et pourquoi me tueriez-vous ? » répliqua le pêcheur. « Je viens de vous mettre en liberté. L'avez-vous déjà oublié ? »",
+   "ref": "je te dis repartit le génie de me parler plus civilement avant que je te tue hé pourquoi me tueriez-vous répliqua le pêcheur je viens de vous mettre en liberté l'avez-vous déjà oublié",
+   "load_ms": 368.78
+  },
+  {
+   "lang": "en_us",
+   "wav": "0011.wav",
+   "duration": 10.92,
+   "compute_ms": 24742.57,
+   "rtf": 2.2658031135531136,
+   "hyp": "Due to the underwater topology, the return flow is concentrated at a few deeper sections and a fast current to deep water may form there.",
+   "ref": "due to the underwater topology the return flow is concentrated at a few deeper sections and a fast current to deep water may form there",
+   "load_ms": 377.28
+  },
+  {
+   "lang": "fr_fr",
+   "wav": "0011.wav",
+   "duration": 14.82,
+   "compute_ms": 26523.769999999997,
+   "rtf": 1.7897280701754383,
+   "hyp": "Par exemple, des étudiants de l'école Béné en Caroline du Nord conçoivent chaque année un site web consacré à leur visite de la capitale de l'État. Chaque année, le site est remis à jour, mais les anciennes versions sont conservées en ligne pour servir d'albums.",
+   "ref": "par exemple des étudiants de l'école bennet en caroline du nord conçoivent chaque année un site web consacré à leur visite de la capitale de l'état chaque année le site est remis à jour mais les anciennes versions sont conservées en ligne pour servir d'album",
+   "load_ms": 380.15
+  },
+  {
+   "lang": "it_it",
+   "wav": "0011.wav",
+   "duration": 12.12,
+   "compute_ms": 24629.48,
+   "rtf": 2.032135313531353,
+   "hyp": "La grotta poggia sulla sommità di una delle montagne, a nord della Mecca, completamente distaccata dal resto del mondo.",
+   "ref": "la grotta poggia sulla sommità di una delle montagne a nord della mecca completamente distaccata dal resto del mondo",
+   "load_ms": 372.19
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0011.wav",
+   "duration": 10.86,
+   "compute_ms": 24529.170000000002,
+   "rtf": 2.2586712707182324,
+   "hyp": "No ano de 1990, foi colocado na lista de patrimônios da humanidade em ameaça devido ao perigo das areias do deserto.",
+   "ref": "no ano de 1990 foi colocado na lista de patrimônios da humanidade em ameaça devido ao perigo das areias do deserto",
+   "load_ms": 384.16
+  },
+  {
+   "lang": "es_419",
+   "wav": "0011.wav",
+   "duration": 5.64,
+   "compute_ms": 23781.78,
+   "rtf": 4.216627659574468,
+   "hyp": "Los luchadores compañeros de Luna también le rindieron homenaje.",
+   "ref": "los luchadores compañeros de luna también le rindieron homenaje",
+   "load_ms": 379.45
+  },
+  {
+   "lang": "de_de",
+   "wav": "0011.wav",
+   "duration": 13.74,
+   "compute_ms": 25056.58,
+   "rtf": 1.823622998544396,
+   "hyp": "Wegen der Unterwasser-Topologie konzentriert sich der Rückfluss in wenigen tieferen Bereichen und eine schnelle Strömung bis hin zu tiefem Wasser kann sich dort bilden.",
+   "ref": "wegen der unterwassertopologie konzentriert sich der rückfluss in wenigen tieferen bereichen und eine schnelle strömung bis hin zu tiefem wasser kann sich dort bilden",
+   "load_ms": 365.51
+  },
+  {
+   "lang": "fr_mls",
+   "wav": "0011.wav",
+   "duration": 15.84,
+   "compute_ms": 24546.050000000003,
+   "rtf": 1.549624368686869,
+   "hyp": "nuit des mille et une nuits tombe premier traduit par antoine galan",
+   "ref": "neuvième nuit des mille et une nuits tome premier traduit par antoine galland enregistré pour librivox point org par enkerli enkerli point wordpress point com",
+   "load_ms": 373.85
+  },
+  {
+   "lang": "en_us",
+   "wav": "0012.wav",
+   "duration": 6.42,
+   "compute_ms": 24341.890000000003,
+   "rtf": 3.791571651090343,
+   "hyp": "The hot chocolate is up to Belgian standards. Fruit juices are pricey but excellent.",
+   "ref": "the hot chocolate is up to belgian standards fruit juices are pricey but excellent",
+   "load_ms": 369.94
+  },
+  {
+   "lang": "fr_fr",
+   "wav": "0012.wav",
+   "duration": 10.08,
+   "compute_ms": 25209.31,
+   "rtf": 2.5009236111111113,
+   "hyp": "L'île de Hong Kong donne son nom au territoire de Hong Kong et représente le principal centre d'intérêt pour de nombreux touristes.",
+   "ref": "l'île de hong kong donne son nom au territoire de hong kong et représente le principal centre d'intérêt pour de nombreux touristes",
+   "load_ms": 380.77
+  },
+  {
+   "lang": "it_it",
+   "wav": "0012.wav",
+   "duration": 12.06,
+   "compute_ms": 24553.88,
+   "rtf": 2.035976782752902,
+   "hyp": "Le ampe aree più a settentrione sono scarsamente popolate. Tra queste alcune sono lande selvagge quasi disabitate.",
+   "ref": "le ampie aree più a settentrione sono scarsamente popolate tra queste alcune sono lande selvagge quasi disabitate",
+   "load_ms": 404.52
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0012.wav",
+   "duration": 11.28,
+   "compute_ms": 28497.39,
+   "rtf": 2.526364361702128,
+   "hyp": "Uma das principais atrações da África do Sul e é considerado o estandarte dos parques nacionais da África do Sul, Sand Parks.",
+   "ref": "é uma das principais atrações da áfrica do sul e é considerado o estandarte dos parques nacionais da áfrica do sul sanparks",
+   "load_ms": 374.68
+  },
+  {
+   "lang": "es_419",
+   "wav": "0012.wav",
+   "duration": 6.24,
+   "compute_ms": 25131.489999999998,
+   "rtf": 4.027482371794871,
+   "hyp": "Los luchadores compañeros de Oluna también le rindieron homenaje",
+   "ref": "los luchadores compañeros de luna también le rindieron homenaje",
+   "load_ms": 8836.1
+  },
+  {
+   "lang": "de_de",
+   "wav": "0012.wav",
+   "duration": 19.68,
+   "compute_ms": 26026.36,
+   "rtf": 1.3224776422764228,
+   "hyp": "Nachdem der Darm 1963 erbaut worden war, kamen die jahreszeitlichen Überflutungen, die Sedimente im Fluss verteilen, zum Stillstand.",
+   "ref": "nachdem der damm 1963 erbaut worden war kamen die jahreszeitlichen überflutungen die sedimente im fluss verteilen zum stillstand",
+   "load_ms": 401.51
+  },
+  {
+   "lang": "fr_mls",
+   "wav": "0012.wav",
+   "duration": 14.73,
+   "compute_ms": 38052.65,
+   "rtf": 2.583343516632722,
+   "hyp": "on ne saurait expliquer quel fut son désespoir plus enfaldu qu'il ne perdît l'esprit cependant comme le jour commençait à paraître il n'oublia pas de faire sa prière en bon musulman ensuite il ajouta celle-ci",
+   "ref": "on ne saurait expliquer quel fut son désespoir peu s'en fallut qu'il ne perdît l'esprit cependant comme le jour commençait à paraître il n'oublia pas de faire sa prière en bon musulman ensuite il ajouta celle-ci",
+   "load_ms": 404.76
+  },
+  {
+   "lang": "en_us",
+   "wav": "0013.wav",
+   "duration": 9.42,
+   "compute_ms": 24679.64,
+   "rtf": 2.6199193205944797,
+   "hyp": "Cuomo, 53, began his governorship earlier this year and signed a bill last month legalizing same-sex marriage.",
+   "ref": "cuomo 53 began his governorship earlier this year and signed a bill last month legalizing same-sex marriage",
+   "load_ms": 393.57
+  },
+  {
+   "lang": "fr_fr",
+   "wav": "0013.wav",
+   "duration": 8.94,
+   "compute_ms": 24599.81,
+   "rtf": 2.751656599552573,
+   "hyp": "L'île de Hong Kong donne son nom au territoire de Hong Kong, qui représente le principal centre d'intérêt pour de nombreux touristes.",
+   "ref": "l'île de hong kong donne son nom au territoire de hong kong et représente le principal centre d'intérêt pour de nombreux touristes",
+   "load_ms": 366.25
+  },
+  {
+   "lang": "it_it",
+   "wav": "0013.wav",
+   "duration": 7.5,
+   "compute_ms": 24562.52,
+   "rtf": 3.2750026666666665,
+   "hyp": "Le squadre antincendio alla fine sono riuscite ad umare il fuoco alle 23.35.",
+   "ref": "le squadre antincendio alla fine sono riuscite a domare il fuoco alle 23:35",
+   "load_ms": 361.89
+  },
+  {
+   "lang": "pt_br",
+   "wav": "0013.wav",
+   "duration": 6.48,
+   "compute_ms": 23955.469999999998,
+   "rtf": 3.6968317901234564,
+   "hyp": "Nos arquipélagos e lagos você não precisa necessariamente de um iate.",
+   "ref": "nos arquipélagos e lagos você não precisa necessariamente de um iate",
+   "load_ms": 365.22
+  },
+  {
+   "lang": "es_419",
+   "wav": "0013.wav",
+   "duration": 8.64,
+   "compute_ms": 25289.46,
+   "rtf": 2.9270208333333327,
+   "hyp": "Los equipos de rescate anti incendios lograron extinguir el fuego a las 11 y 35 p.m.",
+   "ref": "los equipos de rescate antincendios lograron extinguir el fuego a las 11:35 p m",
+   "load_ms": 368.49
+  },
+  {
+   "lang": "de_de",
+   "wav": "0013.wav",
+   "duration": 9.0,
+   "compute_ms": 24751.55,
+   "rtf": 2.750172222222222,
+   "hyp": "Für die Archipeli und Seen brauchen sie nicht unbedingt eine Yacht.",
+   "ref": "für die archipele und seen brauchen sie nicht unbedingt eine yacht",
+   "load_ms": 409.16
+  },
+  {
+   "lang": "fr_mls",
+   "wav": "0013.wav",
+   "duration": 10.27,
+   "compute_ms": 25808.64,
+   "rtf": 2.5130126582278485,
+   "hyp": "Ce discours affligea fort le pêcheur. « Je suis bien malheureux, s'écria-t-il, d'être venu en cet endroit rendre un si grand service à un ingrat. »",
+   "ref": "ce discours affligea fort le pêcheur je suis bien malheureux s'écria-t-il d'être venu en cet endroit rendre un si grand service à un ingrat",
+   "load_ms": 371.55
+  },
+  {
+   "lang": "en_us",
+   "wav": "0014.wav",
+   "duration": 12.78,
+   "compute_ms": 25524.38,
+   "rtf": 1.997212832550861,
+   "hyp": "The harbor was the site of an infamous naval standoff in 1889 when seven ships from Germany, the U.S. and Britain refused to leave the harbor.",
+   "ref": "the harbor was the site of an infamous naval standoff in 1889 when seven ships from germany the us and britain refused to leave the harbor",
+   "load_ms": 418.61
+  },
+  {
+   "lang": "fr_fr",
+   "wav": "0014.wav",
+   "duration": 12.24,
+   "compute_ms": 26248.68,
+   "rtf": 2.1445,
+   "hyp": "Les plantes revêtent leurs plus belles apparences lorsqu'elles se trouvent dans un environnement naturel, alors résister à la tentation d'en retirer ne serait-ce qu'une seule.",
+   "ref": "les plantes revêtent leur plus belle apparence lorsqu'elles se trouvent dans un environnement naturel alors résistez à la tentation d'en retirer ne serait-ce qu'« une seule »",
+   "load_ms": 396.66
+  }
+ ]
+}
