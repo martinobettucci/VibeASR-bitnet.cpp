@@ -159,8 +159,14 @@ serves every x86-64-with-AVX2 host and still lights up VNNI where present.
   stage holds 89% of VAE FFN weights and ~4% of VAE runtime. Apparatus retained
   (`bench/stage6_calib.py`, `VIBEASR_STAGE6_PROJ`).
 - **Prompt hotwords** (`--context-info`): oracle proper nouns took French from 36%
-  to 90% WER. The slot derails autoregressive decoding; real hotword biasing needs
-  decoder-level score boosting, which this runtime does not have.
+  to 90% WER — conditioning derails autoregressive decoding. The decoder-level fix
+  was then built, and it works: `--hotwords a,b,c --hotword-boost 5` (token-trie
+  logit biasing, `utils/hotword_boost.h`) takes FLEURS-French **36.0 → 31.9%** with
+  oracle terms, while the poison control — the *wrong* clip's terms at the same
+  strength — does not degrade the baseline (34.8). λ=8 is past the stability knee:
+  the boost out-argues `<|im_end|>` and generation runs away, so 5 is the
+  documented ceiling. Off by default; the flag-absent decode path is byte-identical,
+  hash-verified. (`bench/hotword_eval.py` reproduces the four-condition table.)
 - **Q8_0 output head**: no accuracy gain over the tied Q6_K embedding (corpus 13.81
   vs 13.65) for +248 MB.
 
