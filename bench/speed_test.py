@@ -131,7 +131,8 @@ def main():
         words = len(hyp.split())
         dec_s = (stats.get("decode") or 0.0) / 1000.0
         rec = {"lang": lang, "wav": r["wav"], "duration": dur, "compute_ms": compute,
-               "rtf": rtf, "words": words, "wall_s": wall, **stats}
+               "rtf": rtf, "words": words, "wall_s": wall, "hyp": hyp,
+               "ref": r["text"], **stats}
         recs.append(rec)
         print("%-4d %-7s %6.2fs %7.0fms %8.3f %7d %7.1f" %
               (k, lang, dur, compute, rtf, words, words / dec_s if dec_s else 0.0),
