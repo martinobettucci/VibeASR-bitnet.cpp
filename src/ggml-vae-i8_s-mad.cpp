@@ -1174,24 +1174,34 @@ struct i8_pack {
     std::vector<int8_t> data;   // [npanel][k4][64], lanes pre-flipped to unsigned
     int k4;
     int nc;
+    int conv_kw;                // 0 = linear order; >0 = conv order (frame-outer)
 };
 
 std::mutex pack_mtx;
 std::unordered_map<const void *, std::unique_ptr<i8_pack>> pack_map;
 
-const i8_pack * get_pack(const void * w, int n, int keff, int nc) {
+// conv_kw == 0: column c of the pack is weight column c laid out in its natural
+// order (k contiguous). conv_kw == KW: the source tensor is a conv weight
+// [KW, IC, OC] (KW fastest) but the activations it will meet are [C, T] windows,
+// i.e. frame-outer channel-inner; the pack permutes each column to that order
+// (element t = j*IC + ic reads src[ic*KW + j]) so the GEMM's k-stream matches the
+// activation bytes as they sit in memory. Integer dot products are order-invariant,
+// so results are bit-identical to the im2col route.
+const i8_pack * get_pack(const void * w, int n, int keff, int nc, int conv_kw) {
     std::lock_guard<std::mutex> lk(pack_mtx);
     std::unique_ptr<i8_pack> & slot = pack_map[w];
     if (!slot) {
         slot.reset(new i8_pack());
         slot->k4 = keff / 4;
         slot->nc = nc;
+        slot->conv_kw = conv_kw;
         const int np = (nc + 15) / 16;
         // Padding lanes hold flipped zero (0x80): they accumulate exactly the
         // 128*rowsum the correction subtracts, so they read back as 0.0f and the
         // masked store/absmax never sees them anyway.
         slot->data.assign((size_t) np * slot->k4 * 64, (int8_t) 0x80);
         const int8_t * src = (const int8_t *) w;
+        const int ic_n = conv_kw > 0 ? n / conv_kw : 0;
         // Column-outer fill: reads walk each weight column contiguously, writes
         // sweep one panel-sized region (<= k4*64 bytes, L2-resident) 16 times.
         // The first cut iterated t-outer, whose reads hopped n bytes 16 times per
@@ -1201,15 +1211,15 @@ const i8_pack * get_pack(const void * w, int n, int keff, int nc) {
             const int cmax = nc - p * 16 < 16 ? nc - p * 16 : 16;
             for (int c = 0; c < cmax; c++) {
                 const int8_t * col = src + (size_t)(p * 16 + c) * n;
-                for (int t = 0; t < slot->k4; t++) {
-                    for (int b = 0; b < 4; b++) {
-                        pdst[(size_t) t * 64 + c * 4 + b] = (int8_t)(col[t * 4 + b] ^ (int8_t) 0x80);
-                    }
+                for (int t = 0; t < keff; t++) {
+                    const int ts = conv_kw > 0 ? (t % ic_n) * conv_kw + t / ic_n : t;
+                    pdst[(size_t)(t / 4) * 64 + c * 4 + (t & 3)] =
+                        (int8_t)(col[ts] ^ (int8_t) 0x80);
                 }
             }
         }
     } else {
-        assert(slot->k4 == keff / 4 && slot->nc == nc);
+        assert(slot->k4 == keff / 4 && slot->nc == nc && slot->conv_kw == conv_kw);
     }
     return slot.get();
 }
@@ -1294,11 +1304,45 @@ VIBEASR_TGT_VNNI static float gemm_i8_f32_packed_vnni(
 void vibeasr_i8s_prepack(const void * w, int n, int nc) {
 #if defined(VIBEASR_HAS_AVX512_PATH)
     if (vibeasr_isa() >= VIBEASR_ISA_VNNI && n > 0 && n % QK_I8_S == 0 && nc > 0) {
-        (void) get_pack(w, n, n, nc);
+        (void) get_pack(w, n, n, nc, 0);
     }
 #else
     (void) w; (void) n; (void) nc;
 #endif
+}
+
+// Conv-order variant: w is [KW, IC, OC], activations will be [C, T] windows.
+void vibeasr_i8s_prepack_conv(const void * w, int kw, int ic, int oc) {
+#if defined(VIBEASR_HAS_AVX512_PATH)
+    const int n = kw * ic;
+    if (vibeasr_isa() >= VIBEASR_ISA_VNNI && n > 0 && n % QK_I8_S == 0 && oc > 0) {
+        (void) get_pack(w, n, n, oc, kw);
+    }
+#else
+    (void) w; (void) kw; (void) ic; (void) oc;
+#endif
+}
+
+// Strided entry for the conv-as-GEMM path: activation row r starts at
+// vy + r*row_stride (rows may overlap -- that is the point), and the pack for vx
+// must already exist in the requested order. Builder-side gating guarantees VNNI.
+float vibeasr_gemm_i8_f32_strided(int n, const void * vx, const void * vy,
+                                  int64_t row_stride, int nr, int nc, int conv_kw,
+                                  float combined_scale, const float * bias,
+                                  float * out, int64_t ldc) {
+    VIBEASR_PROBE(VIBEASR_K_I8_GEMM, (uint64_t) n * (uint64_t) nr * (uint64_t) nc);
+#if defined(VIBEASR_HAS_AVX512_PATH)
+    if (vibeasr_isa() >= VIBEASR_ISA_VNNI && n > 0 && n % QK_I8_S == 0) {
+        const i8_pack * pk = get_pack(vx, n, n, nc, conv_kw);
+        thread_local std::vector<int32_t> rowsum;
+        if ((int) rowsum.size() < nr) rowsum.resize(nr);
+        return gemm_i8_f32_packed_vnni(pk, (const int8_t *) vy, (size_t) row_stride,
+                                       n, nr, nc, combined_scale, bias,
+                                       out, (size_t) ldc, rowsum.data());
+    }
+#endif
+    (void) row_stride; (void) conv_kw;
+    GGML_ABORT("vibeasr_gemm_i8_f32_strided: no VNNI path (builder gating bug)");
 }
 
 float vibeasr_gemm_i8_f32(int n, const void * vx, const void * vy, int nr, int nc,
@@ -1316,7 +1360,7 @@ float vibeasr_gemm_i8_f32(int n, const void * vx, const void * vy, int nr, int n
     // through it. Every shape in the census (VIBEASR_GEMM_SHAPES=1) has n % 32 == 0.
     const int keff = (n / QK_I8_S) * QK_I8_S;
     if (packed_on && vibeasr_isa() >= VIBEASR_ISA_VNNI && keff == n && n > 0 && bias != NULL) {
-        const i8_pack * pk = get_pack(vx, n, keff, nc);
+        const i8_pack * pk = get_pack(vx, n, keff, nc, 0);
         thread_local std::vector<int32_t> rowsum;
         if ((int) rowsum.size() < nr) rowsum.resize(nr);
         return gemm_i8_f32_packed_vnni(pk, (const int8_t *) vy, (size_t) n,

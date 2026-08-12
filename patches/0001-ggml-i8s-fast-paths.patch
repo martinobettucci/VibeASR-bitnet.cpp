@@ -59,10 +59,10 @@ index 99f43c6..f03d62d 100644
  
  void ggml_gemm_q4_0_4x4_q8_0(int n, float * restrict s, size_t bs, const void * restrict vx, const void * restrict vy, int nr, int nc) {
 diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c
-index 23303be..848e696 100644
+index 23303be..09299f6 100644
 --- a/ggml/src/ggml.c
 +++ b/ggml/src/ggml.c
-@@ -5809,6 +5809,37 @@ struct ggml_tensor * ggml_mul_mat_add(
+@@ -5809,6 +5809,78 @@ struct ggml_tensor * ggml_mul_mat_add(
      return result;
  }
  
@@ -97,10 +97,51 @@ index 23303be..848e696 100644
 +    return result;
 +}
 +
++// ggml_mul_mat_add_conv1d
++//
++// Strided causal 1-D conv as a GEMM whose rows are read straight out of x. In the
++// [C, T] activation layout a window of KW frames x IC channels is ONE contiguous
++// slice of KW*IC bytes, and consecutive output frames sit s0*IC bytes apart -- so
++// no im2col materialisation (a KW/s0-fold data expansion) and no [C,T]->[T,C]
++// transpose in front of it. The weight pack is permuted to frame-outer order to
++// match (integer dots are order-invariant: bit-identical to the im2col route).
++// Same op id -> shares the absmax barrier, requantise and work sizing;
++// op_params[0] = 0xC1, [1] = s0, [2] = lp0.
++
++struct ggml_tensor * ggml_mul_mat_add_conv1d(
++        struct ggml_context * ctx,
++        struct ggml_tensor  * w,      // [KW, IC, OC] I8_S
++        struct ggml_tensor  * x,      // [IC, T]      I8_S (unpermuted stage layout)
++        struct ggml_tensor  * bias,   // [OC]         F32
++        int                   s0,
++        int                   lp0) {
++    GGML_ASSERT(w->type == GGML_TYPE_I8_S);
++    GGML_ASSERT(x->type == GGML_TYPE_I8_S);
++    GGML_ASSERT(w->ne[1] == x->ne[0]);            // IC agrees
++    GGML_ASSERT(x->ne[2] == 1 && x->ne[3] == 1);
++    GGML_ASSERT(ggml_is_contiguous(x));
++    GGML_ASSERT((w->ne[0] * w->ne[1]) % 32 == 0); // packed-kernel gate
++
++    const int64_t OW = (x->ne[1] + lp0 - w->ne[0]) / s0 + 1;
++    GGML_ASSERT(OW > 0);
++    const int64_t ne[4] = { w->ne[2], OW, 1, 1 };
++    struct ggml_tensor * result = ggml_new_tensor(ctx, x->type, 4, ne);
++
++    ggml_set_op_params_i32(result, 0, 0xC1);
++    ggml_set_op_params_i32(result, 1, s0);
++    ggml_set_op_params_i32(result, 2, lp0);
++    result->op     = GGML_OP_MUL_MAT_ADD;
++    result->src[0] = w;
++    result->src[1] = x;
++    result->src[2] = bias;
++
++    return result;
++}
++
  // ggml_mul_mat_add_relu
  
  struct ggml_tensor * ggml_mul_mat_add_relu(
-@@ -18726,108 +18757,14 @@ static void ggml_compute_forward_add_scaled(
+@@ -18726,108 +18798,14 @@ static void ggml_compute_forward_add_scaled(
      float local_absmax = 0.0f;
  
  #if defined(__AVX2__)
@@ -217,7 +258,7 @@ index 23303be..848e696 100644
  #elif defined(__ARM_NEON)
      if (gamma_ne0 != 1) {
          const float32x4_t v_inv_a = vdupq_n_f32(1.0f / a_scale);
-@@ -18959,29 +18896,10 @@ static void ggml_compute_forward_add_scaled(
+@@ -18959,29 +18937,10 @@ static void ggml_compute_forward_add_scaled(
      int8_t * dst_data = (int8_t *)dst->data;
  
  #if defined(__AVX2__)
@@ -251,10 +292,77 @@ index 23303be..848e696 100644
  #elif defined(__ARM_NEON)
      {
          float32x4_t v_inv_scale = vdupq_n_f32(inv_scale);
-@@ -19045,6 +18963,49 @@ static void ggml_compute_forward_mul_mat_add(
+@@ -19045,6 +19004,116 @@ static void ggml_compute_forward_mul_mat_add(
      const float inp_scale = *(const float *)((const char *)src1->data + ggml_nelements(src1));
      const float combined_scale = w_scale / inp_scale;
  
++    // conv1d-as-GEMM branch: see ggml_mul_mat_add_conv1d
++    if (ggml_get_op_params_i32(dst, 0) == 0xC1) {
++        const int s0  = ggml_get_op_params_i32(dst, 1);
++        const int lp0 = ggml_get_op_params_i32(dst, 2);
++        const int64_t KW = ne00;
++        const int64_t IC = ne01;
++        const int64_t OC = ne02;
++        const int64_t OW = dst->ne[1];
++        const int64_t n  = KW * IC;
++        const int64_t n_out = OC * OW;
++
++        float * float_buf  = (float *) params->wdata;
++        float * thread_max = float_buf + n_out;
++
++        const int64_t dr = (OW + nth - 1) / nth;
++        const int64_t r0 = dr * ith;
++        const int64_t r1 = r0 + dr < OW ? r0 + dr : OW;
++
++        float local_absmax = 0.0f;
++        if (r0 < r1) {
++            const int8_t * xd = (const int8_t *) src1->data;
++            // Leading output frames whose window starts before t=0 take a
++            // zero-padded stack copy; everything after is direct strided rows.
++            int64_t r = r0;
++            int8_t padbuf[16384];  // KW*IC <= 16384 for every conv in this model
++            GGML_ASSERT(n <= (int64_t) sizeof(padbuf));
++            while (r < r1 && r * s0 < lp0) {
++                const int64_t zpad = (int64_t)(lp0 - r * s0) * IC;  // leading zeros
++                memset(padbuf, 0, zpad);
++                memcpy(padbuf + zpad, xd, n - zpad);
++                const float amax = vibeasr_gemm_i8_f32_strided(
++                    (int) n, src0->data, padbuf, n, 1, (int) OC, (int) KW,
++                    combined_scale, bias_data, float_buf + r * OC, OC);
++                if (amax > local_absmax) local_absmax = amax;
++                r++;
++            }
++            if (r < r1) {
++                const float amax = vibeasr_gemm_i8_f32_strided(
++                    (int) n, src0->data, xd + (r * s0 - lp0) * IC, (int64_t) s0 * IC,
++                    (int)(r1 - r), (int) OC, (int) KW,
++                    combined_scale, bias_data, float_buf + r * OC, OC);
++                if (amax > local_absmax) local_absmax = amax;
++            }
++        }
++
++        thread_max[ith] = local_absmax;
++        ggml_barrier(params->threadpool);
++        if (ith == 0) {
++            float gm = 0.0f;
++            for (int t = 0; t < nth; t++) if (thread_max[t] > gm) gm = thread_max[t];
++            thread_max[0] = gm;
++        }
++        ggml_barrier(params->threadpool);
++        const float global_max = thread_max[0];
++        const float inv_scale = (global_max != 0.0f) ? 127.0f / global_max : 0.0f;
++        if (r0 < r1) {
++            // vectorised epilogue (src/ggml-vae-i8_s-mad.cpp)
++            vibeasr_i8s_quant_i8(float_buf + r0 * OC, (int8_t *) dst->data + r0 * OC,
++                                 (r1 - r0) * OC, inv_scale, /*relu=*/0);
++        }
++        if (ith == 0) {
++            *(float *)((char *) dst->data + ggml_nelements(dst)) =
++                (global_max != 0.0f) ? 127.0f / global_max : 0.0f;
++        }
++        return;
++    }
++
 +    // dw_direct branch: layout-native depthwise conv, see ggml_mul_mat_add_dw_direct
 +    if (ggml_get_op_params_i32(dst, 0) == 0xD1) {
 +        const int64_t C      = ne02;             // channels (w is [k, 1, C])
@@ -301,7 +409,7 @@ index 23303be..848e696 100644
      if (ne01 == 1 && ne02 > 1) {
  
          const int64_t C = ne02;
-@@ -19094,12 +19055,11 @@ static void ggml_compute_forward_mul_mat_add(
+@@ -19094,12 +19163,11 @@ static void ggml_compute_forward_mul_mat_add(
              // acc_buf layout: [C, n_cols] (channel-major)
              // dst layout: ne[0]=1, ne[1]=N, ne[2]=C => physical [C, N] (channel-major)
              for (int64_t ch = 0; ch < C; ch++) {
@@ -319,7 +427,7 @@ index 23303be..848e696 100644
              }
  
          }
-@@ -19127,11 +19087,10 @@ static void ggml_compute_forward_mul_mat_add(
+@@ -19127,11 +19195,10 @@ static void ggml_compute_forward_mul_mat_add(
  
          if (col0 < col1) {
              for (int64_t ch = 0; ch < C; ch++) {
@@ -335,7 +443,7 @@ index 23303be..848e696 100644
              }
          }
  
-@@ -19164,37 +19123,16 @@ static void ggml_compute_forward_mul_mat_add(
+@@ -19164,37 +19231,16 @@ static void ggml_compute_forward_mul_mat_add(
          if (col0 < col1) {
              const int64_t n_cols = col1 - col0;
  
@@ -380,7 +488,7 @@ index 23303be..848e696 100644
          }
  
          // Store local absmax for this thread
-@@ -19219,13 +19157,10 @@ static void ggml_compute_forward_mul_mat_add(
+@@ -19219,13 +19265,10 @@ static void ggml_compute_forward_mul_mat_add(
          const float inv_scale = (global_max != 0.0f) ? 127.0f / global_max : 0.0f;
  
          if (col0 < col1) {
@@ -398,7 +506,7 @@ index 23303be..848e696 100644
          }
  
          // Thread 0 stores the per-tensor output scale
-@@ -19296,12 +19231,11 @@ static void ggml_compute_forward_mul_mat_add_relu(
+@@ -19296,12 +19339,11 @@ static void ggml_compute_forward_mul_mat_add_relu(
              }
  
              for (int64_t ch = 0; ch < C; ch++) {
@@ -416,7 +524,7 @@ index 23303be..848e696 100644
              }
          }
  
-@@ -19324,12 +19258,10 @@ static void ggml_compute_forward_mul_mat_add_relu(
+@@ -19324,12 +19366,10 @@ static void ggml_compute_forward_mul_mat_add_relu(
  
          if (col0 < col1) {
              for (int64_t ch = 0; ch < C; ch++) {
@@ -433,7 +541,7 @@ index 23303be..848e696 100644
              }
          }
  
-@@ -19353,33 +19285,14 @@ static void ggml_compute_forward_mul_mat_add_relu(
+@@ -19353,33 +19393,14 @@ static void ggml_compute_forward_mul_mat_add_relu(
          if (col0 < col1) {
              const int64_t n_cols = col1 - col0;
  
@@ -472,7 +580,7 @@ index 23303be..848e696 100644
          }
  
          thread_max[ith] = local_absmax;
-@@ -19400,14 +19313,10 @@ static void ggml_compute_forward_mul_mat_add_relu(
+@@ -19400,14 +19421,10 @@ static void ggml_compute_forward_mul_mat_add_relu(
          const float inv_scale = (global_max != 0.0f) ? 127.0f / global_max : 0.0f;
  
          if (col0 < col1) {
@@ -491,7 +599,7 @@ index 23303be..848e696 100644
          }
  
          if (ith == 0) {
-@@ -22114,6 +22023,61 @@ struct ggml_cplan ggml_graph_plan(
+@@ -22114,6 +22131,61 @@ struct ggml_cplan ggml_graph_plan(
      return cplan;
  }
  
@@ -553,7 +661,7 @@ index 23303be..848e696 100644
  static thread_ret_t ggml_graph_compute_thread(void * data) {
      struct ggml_compute_state * state = (struct ggml_compute_state *) data;
      struct ggml_threadpool    * tp    = state->threadpool;
-@@ -22134,6 +22098,14 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
+@@ -22134,6 +22206,14 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
      for (int node_n = 0; node_n < cgraph->n_nodes && !tp->abort; node_n++) {
          struct ggml_tensor * node = cgraph->nodes[node_n];
  
@@ -568,7 +676,7 @@ index 23303be..848e696 100644
          ggml_compute_forward(&params, node);
  
          if (state->ith == 0 && cplan->abort_callback &&
-@@ -22143,6 +22115,17 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
+@@ -22143,6 +22223,17 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
          }
  
          ggml_barrier(state->threadpool);

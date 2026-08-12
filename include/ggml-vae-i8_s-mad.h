@@ -63,6 +63,30 @@ float vibeasr_gemm_i8_f32(int n, const void * vx, const void * vy, int nr, int n
 // shapes the packed kernel would not take.
 void vibeasr_i8s_prepack(const void * w, int n, int nc);
 
+// Conv-order prepack for a [KW, IC, OC] conv weight whose activations arrive as
+// [C, T] windows (frame-outer, channel-inner). See vibeasr_gemm_i8_f32_strided.
+void vibeasr_i8s_prepack_conv(const void * w, int kw, int ic, int oc);
+
+// Strided-row variant of the fused GEMM: activation row r starts at
+// vy + r*row_stride, rows may overlap. This is what turns a strided 1-D conv over
+// [C, T] activations into a plain GEMM: the window of KW frames x IC channels is
+// one contiguous slice of KW*IC bytes, and consecutive output frames are s0*IC
+// bytes apart. conv_kw selects the matching weight-pack order (0 = linear).
+// Requires VNNI (the graph builder gates on it); aborts otherwise.
+float vibeasr_gemm_i8_f32_strided(int n, const void * vx, const void * vy,
+                                  int64_t row_stride, int nr, int nc, int conv_kw,
+                                  float combined_scale, const float * bias,
+                                  float * out, int64_t ldc);
+
+// Graph builder: strided causal conv1d as GEMM, replacing im2col+mul_mat_add for
+// w [KW, IC, OC] I8_S over x [IC, T] I8_S (the unpermuted stage layout), bias F32
+// [OC] -> I8_S [OC, OW], OW = (T + lp0 - KW)/s0 + 1. Defined in the patched ggml.c.
+struct ggml_tensor * ggml_mul_mat_add_conv1d(struct ggml_context * ctx,
+                                             struct ggml_tensor  * w,
+                                             struct ggml_tensor  * x,
+                                             struct ggml_tensor  * bias,
+                                             int s0, int lp0);
+
 // out[i] = (int8) roundf(clamp(in[i]*inv_scale, -127, 127)); relu clamps at 0.
 void vibeasr_i8s_quant_i8(const float * in, int8_t * out, int64_t n,
                           float inv_scale, int relu);

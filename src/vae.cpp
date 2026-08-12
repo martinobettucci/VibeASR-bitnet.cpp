@@ -4,6 +4,7 @@
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
 #include "ggml-vae-i8_s-mad.h"
+#include "vibeasr-cpu.h"
 
 #include "time_compat.h"
 
@@ -91,6 +92,23 @@ static struct ggml_tensor* ggml_nn_linear_relu(
     result = ggml_reshape_3d(ctx, result, OC, L, N);
 
     return result;
+}
+
+// conv-as-GEMM gate: VNNI host and not disabled. Decided once, used both by the
+// graph builder (which conv nodes to emit, which transposes to skip) and by the
+// prepack pass (conv-order weight packs exist only for the graphs that read them).
+static bool vibeasr_conv_gemm_on() {
+    static const bool on = []() {
+        const char* e = getenv("VIBEASR_CONV_GEMM");
+        return vibeasr_isa() >= VIBEASR_ISA_VNNI && !(e && strcmp(e, "0") == 0);
+    }();
+    return on;
+}
+
+// Eligible = the packed kernel's K gate; small-n convs (down0, KW*IC = 8) stay on
+// the im2col + small-n-kernel route.
+static bool vibeasr_conv_gemm_eligible(const struct ggml_tensor* w) {
+    return vibeasr_conv_gemm_on() && (w->ne[0] * w->ne[1]) % 32 == 0;
 }
 
 static struct ggml_tensor* ggml_nn_conv_1d(
@@ -305,12 +323,23 @@ struct AudioVAEEncoder {
         // between markers to it. Free when profiling is off.
         char mark[64];
 
-        // Downsamples and stages
+        // Downsamples and stages. x_ct tracks whether x is still in the [C, T]
+        // stage layout: the conv-as-GEMM path consumes that directly (windows are
+        // contiguous slices), so the [C,T]->[T,C] transpose in front of each
+        // eligible conv is skipped entirely.
+        bool x_ct = false;
         for (int i = 0; i < n_stages; i++) {
 
-            x = ggml_nn_conv_1d(ctx, x, downsamples[i].conv_weight,
-                                 downsamples[i].conv_bias,
-                                 downsample_strides[i], downsample_kernel_sizes[i]-downsample_strides[i], 1);
+            if (x_ct) {
+                x = ggml_mul_mat_add_conv1d(ctx, downsamples[i].conv_weight, x,
+                                            downsamples[i].conv_bias,
+                                            downsample_strides[i],
+                                            downsample_kernel_sizes[i]-downsample_strides[i]);
+            } else {
+                x = ggml_nn_conv_1d(ctx, x, downsamples[i].conv_weight,
+                                     downsamples[i].conv_bias,
+                                     downsample_strides[i], downsample_kernel_sizes[i]-downsample_strides[i], 1);
+            }
             snprintf(mark, sizeof(mark), "MARK:%s.down%d", tag, i);
             ggml_set_name(x, mark);
             
@@ -337,14 +366,26 @@ struct AudioVAEEncoder {
                 x = ggml_nn_linear(ctx, x, trunc_w, trunc_b);
             }
 
-            x = ggml_cont(ctx, ggml_permute(ctx, x, 1, 0, 2, 3));
+            // Transpose only if the next conv (down i+1, or the head) cannot read
+            // [C, T] directly through the GEMM path.
+            struct ggml_tensor* next_w = (i + 1 < n_stages)
+                                         ? downsamples[i + 1].conv_weight
+                                         : head_conv_weight;
+            x_ct = vibeasr_conv_gemm_eligible(next_w);
+            if (!x_ct) {
+                x = ggml_cont(ctx, ggml_permute(ctx, x, 1, 0, 2, 3));
+            }
             snprintf(mark, sizeof(mark), "MARK:%s.stage%d", tag, i);
             ggml_set_name(x, mark);
 
         }
-        
+
         // Head
-        x = ggml_nn_conv_1d(ctx, x, head_conv_weight, head_conv_bias, 1, 8-1, 1);
+        if (x_ct) {
+            x = ggml_mul_mat_add_conv1d(ctx, head_conv_weight, x, head_conv_bias, 1, 8-1);
+        } else {
+            x = ggml_nn_conv_1d(ctx, x, head_conv_weight, head_conv_bias, 1, 8-1, 1);
+        }
         snprintf(mark, sizeof(mark), "MARK:%s.head", tag);
         ggml_set_name(x, mark);
         
@@ -715,9 +756,19 @@ vae_model_t* vae_load_model_from_file(
         for (std::map<std::string, struct ggml_tensor*>::iterator it = model->tensors.begin();
              it != model->tensors.end(); ++it) {
             struct ggml_tensor * t = it->second;
-            if (t && t->type == GGML_TYPE_I8_S && t->ne[1] > 1 &&
-                t->ne[2] == 1 && t->ne[3] == 1 && t->ne[0] % 32 == 0 && t->data) {
+            if (!t || t->type != GGML_TYPE_I8_S || !t->data || t->ne[3] != 1) continue;
+            if (t->ne[1] > 1 && t->ne[2] == 1 && t->ne[0] % 32 == 0) {
+                // 2-D linear weight, natural order
                 vibeasr_i8s_prepack(t->data, (int) t->ne[0], (int) t->ne[1]);
+                packed++;
+            } else if (t->ne[2] > 1 && vibeasr_conv_gemm_on() &&
+                       (t->ne[0] * t->ne[1]) % 32 == 0) {
+                // 3-D conv weight [KW, IC, OC], packed in the frame-outer order the
+                // conv-as-GEMM path reads. Gated on the same switch as the graph
+                // builder: with conv-GEMM off these tensors go through the im2col +
+                // linear route, which packs (and keys) them in natural order.
+                vibeasr_i8s_prepack_conv(t->data, (int) t->ne[0], (int) t->ne[1],
+                                         (int) t->ne[2]);
                 packed++;
             }
         }
