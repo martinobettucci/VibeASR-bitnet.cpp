@@ -21,13 +21,16 @@ fork; for the original project, its paper numbers and its documentation, see the
 What the fork changes, all measured (see the results section below and the
 [model card](https://huggingface.co/P2Enjoy/VibeVoice-ASR-BitNet-slim)):
 
-- **~2.8× faster end to end** than the upstream runtime on a 4-core AVX-512 VM —
-  compute RTF ≈ 0.37, real-time with headroom. AVX-512/VNNI kernels with runtime
-  dispatch, a register-tiled INT8 GEMM, vectorised quantisation epilogues, and a
-  layout-native depthwise convolution that removed 33% of graph time.
+- **2.56× faster than the upstream runtime** — paired per-clip median over the
+  same 100 clips, same host, same threads; sub-real-time on a 4-vCPU VM.
+  AVX-512/VNNI kernels with runtime dispatch, a packed-B INT8 GEMM with the
+  dequantisation epilogue fused into the accumulator store, conv-as-GEMM
+  downsampling that reads windows in place (no im2col, no transposes), and a
+  layout-native depthwise convolution.
 - **27% smaller model** (1.70 → 1.23 GB): the LM shipped its tied output projection
-  twice; the F16 copy is dropped, at no measured accuracy cost (corpus WER 13.65 vs
-  13.95 for the original weights, same build, six languages).
+  twice; the F16 copy is dropped, at no measured accuracy cost — verified twice on
+  different suites (+0.30 and +0.28 corpus WER, within per-language scatter that
+  goes both ways; tables on the model card).
 - **Deterministic**: identical transcripts at any thread count. Upstream output
   changed with `-t`; the fork removes every partition-dependent rounding path.
 - **Portable binaries**: AVX2 baseline build with runtime dispatch up to VNNI —
@@ -96,24 +99,37 @@ AVX-512F/BW/DQ/VL + VNNI) cloud VMs**. Every number is reproduced by
 Accuracy tables live on the [model card](https://huggingface.co/P2Enjoy/VibeVoice-ASR-BitNet-slim)
 and are not duplicated here.
 
-### Result: ~2.8× end to end, real-time on 4 modest cores
+### Result: 2.56× the upstream engine, measured as a ratio
 
-Compute-only time for an 8.38 s FLEURS clip at 4 threads (VAE encode + prefill +
-decode, model load excluded), medians of 7 runs, each pair measured back-to-back on
-one host:
+Absolute RTF numbers are a property of whatever VM a benchmark lands on — this
+project measured the same binary drifting ±18% between sessions as its cloud host
+migrated. So the headline is a **ratio**: engines run back-to-back on one host,
+same 100 clips (seven language/register sets, 21.8 min of audio), same 4 threads,
+compute only (model load excluded), paired per clip:
 
-| Configuration | Compute | RTF |
-|:--|--:|--:|
-| Upstream (AVX2 kernels, released code) | ~8.8 s | ~1.05 |
-| + row-block tuning, VNNI kernels, tiled INT8 GEMM, vector epilogues | 5.6 s | 0.67 |
-| + layout-native depthwise conv | **3.1 s** | **0.372** |
+| Engine | Weights | Speed vs this fork | WER |
+|:--|:--|--:|:--|
+| **This fork** | slim 1.23 GB | 1.00× | baseline |
+| Upstream microsoft/VibeASR.cpp | original 1.70 GB | **2.56× slower** | ≈ parity (+0.28) |
+| whisper.cpp large-v3-turbo q5_0 | 1.6 GB → 574 MB q5 | 3.94× slower | much better |
+| whisper.cpp small q5_1 | 190 MB q5 | 1.07× (parity) | better |
 
-Cloud VMs migrate across hosts and absolute times vary between sessions; the
-*ratios* were taken as same-host A/B pairs with non-overlapping 7-run ranges, and the
-largest single step (the layout-native conv) replicates across two different hosts:
-1.46× (4559→3115 ms) and 1.40× (7992→5703 ms). At these speeds a
-stream holds real-time on ~1.5 cores, so a 32-core server carries roughly 20
-concurrent streams — the deployment shape that replaces an ASR GPU.
+WER columns are summarised deliberately — per-language accuracy tables live on the
+[model card](https://huggingface.co/P2Enjoy/VibeVoice-ASR-BitNet-slim), which is
+the accuracy authority for these weights. Two honest notes in both directions:
+the fork's 2.56× is an engine-vs-engine claim on identical model architecture and
+holds flat across clip lengths (2.2–2.7×); and on this FLEURS-register corpus
+whisper-small matches our speed at better accuracy — the places this stack wins
+structurally are **short clips** (whisper always encodes a fixed 30 s window:
+under 8 s of audio whisper-small is 1.76× slower, and the gap widens as clips
+shorten), **native segment/speaker JSON output**, and **decoder-level hotword
+biasing**. Whisper was given each clip's language code (generous — our model runs
+unhinted). Reproduce with `bench/speed_test.py`, `bench/whisper_bench.py`,
+`bench/relative_report.py`.
+
+At the measured throughput a stream holds real-time on ~2 of these vCPUs, so a
+32-core server carries roughly 16 concurrent streams — the deployment shape that
+replaces an ASR GPU.
 
 ### Where the time went, measured
 
@@ -135,6 +151,22 @@ stage) drove every optimisation. The headline findings, in the order they were f
    layout-native depthwise-conv node (`dw_direct`): the [dim, frames] layout makes the
    causal k-tap conv k fused multiply-adds over contiguous vectors. Data movement fell
    to 8%; byte-identical transcripts with the old chain (`VIBEASR_DWCONV=0`).
+6. **The GEMM tile was reduction-bound at small K.** The early encoder stages run
+   tall-thin matmuls (K = 32–512 bytes, tens of thousands of rows); a 4×4 tile
+   ending in 16 horizontal reductions costs more than its vpdpbusd work, and K=32
+   missed the tile gate entirely. The packed-B kernel repacks weights once per
+   tensor (at model load) into the layout `vpdpbusd` natively consumes, accumulates
+   16 output channels vertically — no horizontal reductions, K%4 granularity — and
+   fuses the int32→float scale+bias+absmax epilogue into the accumulator store, so
+   the int32 buffer, its memset and the separate dequantisation pass disappear.
+   Acoustic encoder 1.26× (7-rep interleaved medians); bit-exact
+   (`VIBEASR_GEMM_PACKED=0` restores the unfused sequence).
+7. **im2col was never necessary.** In the [C, T] stage layout a strided-conv window
+   of KW frames × IC channels is one contiguous slice of KW·IC bytes, so the packed
+   GEMM reads downsample windows straight out of the activation tensor with a row
+   stride of s·IC — and the [C,T]→[T,C] transpose feeding each conv dies with it
+   (12 of 14 im2col nodes and all 14 per-stage transposes). VAE 1.44× on top of
+   everything above; bit-exact (`VIBEASR_CONV_GEMM=0`).
 
 ### Determinism
 
@@ -169,6 +201,13 @@ serves every x86-64-with-AVX2 host and still lights up VNNI where present.
   hash-verified. (`bench/hotword_eval.py` reproduces the four-condition table.)
 - **Q8_0 output head**: no accuracy gain over the tied Q6_K embedding (corpus 13.81
   vs 13.65) for +248 MB.
+- **Parallel encoders on 4 cores**: the acoustic and semantic graphs are
+  independent and the code can run them concurrently on pinned disjoint cores
+  (without pinning, two ggml pools spin-waiting at node barriers on shared cores
+  measured 3.5× *slower* than sequential). But on 4 cores it loses anyway —
+  semantic is latency-bound (~1.1 s at any thread count) while acoustic scales to
+  every core it is given: pinned 2+2 measured 6.25 s vs 3.44 s sequential. The
+  machinery ships default-on at ≥ 6 threads (`VIBEASR_PAR_ENC=1/0` forces).
 
 ### Tools this added
 
@@ -177,6 +216,9 @@ serves every x86-64-with-AVX2 host and still lights up VNNI where present.
 | `tools/requant_lm_head.cpp` | re-quantise or drop one tensor of an I2_S GGUF |
 | `bench/kernel_bench` | exact-reference kernel validation + throughput |
 | `bench/run_all.sh` | full reproduction: build → models → sweeps → tables |
+| `bench/speed_test.py` | N-clip RTF distribution + hypotheses on one engine |
+| `bench/whisper_bench.py` | the same clip draw through whisper.cpp |
+| `bench/relative_report.py` | WER + paired speed ratios across engine result files |
 | `bench/model_report.py` | per-tensor bit-budget of a GGUF |
 | `VIBEASR_NODE_PROFILE` / `VIBEASR_KERNEL_STATS` | graph and kernel profilers |
 | `patches/0001-ggml-i8s-fast-paths.patch` | all submodule changes, applied by `setup_env.py` |

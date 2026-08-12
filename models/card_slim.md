@@ -41,16 +41,15 @@ through the Q6_K copy. That is the only numerical change, and it also removes
 
 ## Accuracy
 
-FLEURS test clips (24 per language) plus a Multilingual LibriSpeech French anchor,
-greedy decoding, scored corpus-level with digits and years spelled out on both sides
-(methodology and scripts:
-[bench/README.md](https://github.com/martinobettucci/VibeASR-bitnet.cpp/blob/claude/asr-cpu-optimization-cztnh9/bench/README.md)).
+Two measurements, two questions.
 
-Both models measured with one runtime build (branch commit `094b53c`, portable
-AVX2+VNNI, deterministic — identical transcripts at any thread count). Transcripts
-are bit-reproducible *within* a build; absolute WER can shift a point or two between
-builds as float codegen changes, which is why both columns always come from the same
-binary.
+**1. Does the slim repack cost accuracy?** FLEURS test clips (24 per language)
+plus a Multilingual LibriSpeech French anchor, greedy decoding, scored
+corpus-level with digits and years spelled out on both sides (methodology and
+scripts:
+[bench/README.md](https://github.com/martinobettucci/VibeASR-bitnet.cpp/blob/claude/asr-cpu-optimization-cztnh9/bench/README.md)).
+Both models on one runtime build (`094b53c`, portable AVX2+VNNI, deterministic —
+identical transcripts at any thread count):
 
 | Corpus / language | Released (1.70 GB) | **Slim (1.23 GB)** | Δ |
 |:--|--:|--:|--:|
@@ -63,15 +62,35 @@ binary.
 | **FLEURS corpus** | **13.95** | **14.25** | **+0.30** |
 | MLS French (read speech) | 21.97 | 22.31 | +0.34 |
 
-Four of six FLEURS languages produce **identical transcripts** under both models;
-German is marginally better, and the corpus delta (+0.30) comes almost entirely from
-French, the model's weakest language, where ±1–2 points is within sampling noise on
-~700 reference words. Practical read: **no measurable accuracy cost** for the 27%
-size reduction.
+Four of six languages produce **identical transcripts**; the corpus delta comes
+almost entirely from French, the model's weakest language, where ±1–2 points is
+sampling noise on ~700 reference words. Practical read: **no measurable accuracy
+cost** for the 27% size reduction. The MLS row is the register check: French drops
+from ~35% (encyclopedic FLEURS) to ~22% (audiobooks) for both models — corpus
+difficulty, not quantisation damage.
 
-The MLS row doubles as the register check: French drops from ~35% (FLEURS,
-encyclopedic) to ~22% (audiobooks) for both models — the FLEURS gap is corpus
-difficulty, not a defect of either quantisation.
+**2. Where does the model sit in the landscape?** A second, independent suite —
+100 clips drawn across the six languages plus the MLS-French anchor, all engines
+back-to-back on one host at 4 threads, later runtime build, whisper given each
+clip's language code (generous: this model runs unhinted):
+
+| Engine / weights | de | en | es | fr | fr-MLS | it | pt | **all** |
+|:--|--:|--:|--:|--:|--:|--:|--:|--:|
+| Upstream engine, original 1.70 GB | 16.7 | 6.6 | 5.8 | 32.7 | 21.6 | 8.3 | 10.8 | **15.75** |
+| **This repo (slim), fork engine** | 13.9 | 7.2 | 5.8 | 35.4 | 21.2 | 10.2 | 10.5 | **16.03** |
+| whisper.cpp small q5_1 | 8.5 | 4.6 | 7.1 | 12.9 | 16.7 | 6.6 | 8.0 | **9.92** |
+| whisper.cpp large-v3-turbo q5_0 | 4.1 | 3.7 | 4.0 | 3.3 | 10.3 | 3.3 | 4.3 | **5.12** |
+
+Read it straight: slim-vs-original is again parity (+0.28, per-language scatter in
+both directions — German improves under the fork's overflow-fixed kernels, Italian
+regresses), while whisper models beat this architecture on accuracy at this corpus
+register. What this stack offers instead is speed shape and features: compute
+proportional to clip length where whisper always encodes a fixed 30 s window (this
+engine is 1.76× *faster* than whisper-small below 8 s of audio and 3.9× faster
+than turbo overall), native segment/speaker JSON, and decoder-level hotword
+biasing. Speed ratios and their methodology live in the
+[runtime repo](https://github.com/martinobettucci/VibeASR-bitnet.cpp/tree/claude/asr-cpu-optimization-cztnh9)
+and are not duplicated here.
 
 The runtime also ships opt-in decoder-level hotword biasing (`--hotwords`,
 token-trie logit boosting): on FLEURS-French with oracle terms it recovers ~4 WER
@@ -88,11 +107,14 @@ languages degrade sharply; this repack does not change language coverage.
 
 ## Speed
 
-Documented in the runtime repo, not here — it is a property of the code, and the
-code moved a lot: ~2.8× end to end versus the upstream runtime on a 4-core AVX-512
-VM (compute RTF ≈ 0.37 for an 8 s clip), via VNNI kernels, a register-tiled INT8
-GEMM, vectorised quantisation epilogues and a layout-native depthwise convolution.
-Tables, profiler methodology, and full reproduction scripts:
+Documented in the runtime repo, not here — it is a property of the code, and
+absolute RTF is a property of the host, so speed is published as **ratios**
+between engines measured back-to-back: **2.56× faster than the upstream runtime**
+(paired per-clip median, 100 clips, identical weights class), parity with
+whisper-small on long clips and 1.76× faster below 8 s. Achieved via VNNI kernels
+with a packed-B INT8 GEMM (fused dequantisation epilogue), conv-as-GEMM
+downsampling, and a layout-native depthwise convolution. Tables, profiler
+methodology, and full reproduction scripts:
 
 ➡️ **[martinobettucci/VibeASR-bitnet.cpp](https://github.com/martinobettucci/VibeASR-bitnet.cpp/tree/claude/asr-cpu-optimization-cztnh9)** — "CPU optimisation on AVX-512"
 
