@@ -824,6 +824,10 @@ void vae_free(vae_context_t* ctx) {
     delete ctx;
 }
 
+void vae_set_n_threads(vae_context_t* ctx, int32_t n_threads) {
+    ctx->n_threads = n_threads;
+}
+
 int32_t vae_model_acoustic_dim(const vae_model_t* model) {
     return model->acoustic_dim;
 }

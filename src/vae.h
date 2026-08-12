@@ -47,6 +47,9 @@ vae_context_t* vae_new_context_with_model(
 // Free context
 void vae_free(vae_context_t* ctx);
 
+// Change the thread count used for subsequent encodes on this context
+void vae_set_n_threads(vae_context_t* ctx, int32_t n_threads);
+
 // Get model info
 int32_t vae_model_acoustic_dim(const vae_model_t* model);
 int32_t vae_model_semantic_dim(const vae_model_t* model);

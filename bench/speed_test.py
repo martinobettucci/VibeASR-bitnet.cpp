@@ -119,8 +119,10 @@ def main():
         if hyp is None:
             print("%-4d %-7s  FAILED: %s" % (k, lang, stats.get("error", "?")[:60]), flush=True)
             continue
+        vae_keys = (("vae_parallel",) if stats.get("vae_parallel")
+                    else ("vae_acoustic", "vae_semantic"))
         compute = sum(stats.get(x) or 0.0 for x in
-                      ("vae_acoustic", "vae_semantic", "prompt_build", "prefill", "decode"))
+                      vae_keys + ("prompt_build", "prefill", "decode"))
         dur = r["duration"]
         rtf = compute / 1000.0 / dur
         # asr_infer does not print a token count; approximate from the decode budget

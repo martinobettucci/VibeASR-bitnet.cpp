@@ -27,6 +27,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TIMINGS = {
     "vae_acoustic":  re.compile(r"VAE acoustic encode:\s+([\d.]+) ms"),
     "vae_semantic":  re.compile(r"VAE semantic encode:\s+([\d.]+) ms"),
+    # Wall clock of the overlapped encoder pair (parallel mode). When present, the
+    # two per-encoder lines above overlap in time and must NOT be summed.
+    "vae_parallel":  re.compile(r"VAE parallel encode:\s+([\d.]+) ms"),
     "prompt_build":  re.compile(r"Prompt build:\s+([\d.]+) ms"),
     "prefill":       re.compile(r"LM prefill:\s+([\d.]+) ms"),
     "decode":        re.compile(r"LM decode:\s+([\d.]+) ms"),
@@ -158,8 +161,10 @@ def main():
             werr += edit_distance(rw, hw); wtot += len(rw)
             cerr += edit_distance(ref_n, hyp_n); ctot += len(ref_n)
 
+            vae_keys = (("vae_parallel",) if stats.get("vae_parallel")
+                        else ("vae_acoustic", "vae_semantic"))
             compute = sum(v or 0.0 for k, v in stats.items()
-                          if k in ("vae_acoustic", "vae_semantic", "prompt_build", "prefill", "decode"))
+                          if k in vae_keys + ("prompt_build", "prefill", "decode"))
             audio_s += r["duration"]
             compute_s += compute / 1000.0
             total_s += (stats.get("total") or 0.0) / 1000.0

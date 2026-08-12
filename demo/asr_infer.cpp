@@ -26,6 +26,23 @@
 #include <ctime>
 #include <string>
 #include <vector>
+#include <thread>
+
+#ifdef __linux__
+#include <sched.h>
+// Pin the calling thread to logical CPUs [lo, hi). ggml workers are spawned by the
+// computing thread and inherit its mask, so pinning here confines a whole graph
+// compute. Without this, two concurrent pools spin-wait at node barriers on shared
+// cores and every preemption stall costs a scheduler quantum per barrier -- measured
+// 3.5x SLOWER than sequential. With disjoint masks each pool spins only on cores it
+// owns.
+static void pin_cpu_range(int lo, int hi) {
+    cpu_set_t s;
+    CPU_ZERO(&s);
+    for (int i = lo; i < hi; i++) CPU_SET(i, &s);
+    sched_setaffinity(0, sizeof(s), &s);
+}
+#endif
 
 //
 // Configuration
@@ -265,19 +282,88 @@ int main(int argc, char ** argv) {
     double lm_load_time = get_time_ms() - t0;
 
     // ========================================
-    // Step 4: VAE Acoustic Encode
+    // Steps 4+5: VAE Encode (acoustic + semantic)
+    //
+    // The two encoders are independent graphs over the same audio, so by default
+    // they run concurrently, each on half the threads: per-graph outputs are
+    // thread-count-invariant (a determinism property this runtime maintains and
+    // hash-verifies), so transcripts are identical either way -- only the wall
+    // clock changes. VIBEASR_PAR_ENC=0 restores the sequential order for A/B and
+    // for profiling runs, whose per-section attribution assumes one graph at a
+    // time.
     // ========================================
-    fprintf(stderr, "[Step 4] VAE acoustic encoding...\n");
-
     int32_t n_samples = (int32_t)audio.samples.size();
     int32_t expected_frames = (n_samples + params.compress_ratio - 1) / params.compress_ratio;
 
     std::vector<float> acoustic_features(expected_frames * acoustic_dim);
-    float acoustic_time_ms = 0.0f;
+    std::vector<float> semantic_features(expected_frames * semantic_dim);
+    float acoustic_time_ms = 0.0f, semantic_time_ms = 0.0f;
+    int32_t acoustic_frames = -1, semantic_frames = -1;
+    double vae_parallel_ms = 0.0;
 
-    int32_t acoustic_frames = vae_encode_acoustic_with_timing(
-        vae_ctx, audio.samples.data(), n_samples,
-        acoustic_features.data(), &acoustic_time_ms);
+    {
+        // Measured on the 4-core reference VM (7-rep medians, fr_fr/0000): the
+        // acoustic encoder scales to all 4 cores (4750 ms at 2t -> 1427 ms at 4t)
+        // while the semantic encoder is latency-bound (~1130 ms at ANY thread
+        // count), so a pinned 2+2 split loses outright: parallel 6253 ms vs
+        // sequential 3436 ms. Overlap only pays when each pool keeps >= 3 cores;
+        // default accordingly. VIBEASR_PAR_ENC=1/0 overrides either way.
+        const char * pe = getenv("VIBEASR_PAR_ENC");
+        const bool par_enc = pe ? (strcmp(pe, "0") != 0 && params.n_threads >= 2)
+                                : params.n_threads >= 6;
+
+        if (par_enc) {
+            fprintf(stderr, "[Step 4+5] VAE encoding (acoustic %d threads + semantic %d threads)...\n",
+                    (params.n_threads + 1) / 2, params.n_threads / 2);
+            struct vae_context_params cp2 = vae_context_default_params();
+            cp2.n_threads = params.n_threads / 2;      // semantic is the shorter graph
+            vae_context_t * vae_ctx2 = vae_new_context_with_model(vae_model, cp2);
+            if (!vae_ctx2) {
+                fprintf(stderr, "Error: Failed to create second VAE context\n");
+                goto cleanup;
+            }
+            const int t_ac = (params.n_threads + 1) / 2;
+            const int t_se = params.n_threads / 2;
+            vae_set_n_threads(vae_ctx, t_ac);
+#ifdef __linux__
+            cpu_set_t full_mask;
+            sched_getaffinity(0, sizeof(full_mask), &full_mask);
+#endif
+            double w0 = get_time_ms();
+            std::thread se_thread([&]() {
+#ifdef __linux__
+                pin_cpu_range(t_ac, t_ac + t_se);
+#endif
+                semantic_frames = vae_encode_semantic_with_timing(
+                    vae_ctx2, audio.samples.data(), n_samples,
+                    semantic_features.data(), &semantic_time_ms);
+            });
+#ifdef __linux__
+            pin_cpu_range(0, t_ac);
+#endif
+            acoustic_frames = vae_encode_acoustic_with_timing(
+                vae_ctx, audio.samples.data(), n_samples,
+                acoustic_features.data(), &acoustic_time_ms);
+            se_thread.join();
+#ifdef __linux__
+            sched_setaffinity(0, sizeof(full_mask), &full_mask);
+#endif
+            vae_parallel_ms = get_time_ms() - w0;
+            vae_set_n_threads(vae_ctx, params.n_threads);
+            vae_free(vae_ctx2);
+        } else {
+            fprintf(stderr, "[Step 4] VAE acoustic encoding...\n");
+            acoustic_frames = vae_encode_acoustic_with_timing(
+                vae_ctx, audio.samples.data(), n_samples,
+                acoustic_features.data(), &acoustic_time_ms);
+            if (acoustic_frames >= 0) {
+                fprintf(stderr, "[Step 5] VAE semantic encoding...\n");
+                semantic_frames = vae_encode_semantic_with_timing(
+                    vae_ctx, audio.samples.data(), n_samples,
+                    semantic_features.data(), &semantic_time_ms);
+            }
+        }
+    }
 
     if (acoustic_frames < 0) {
         fprintf(stderr, "Error: VAE acoustic encoding failed\n");
@@ -288,19 +374,7 @@ int main(int argc, char ** argv) {
     fprintf(stderr, "  Acoustic: %d frames, dim=%d, time=%.1fms\n",
             acoustic_frames, acoustic_dim, acoustic_time_ms);
 
-    // ========================================
-    // Step 5: VAE Semantic Encode
-    // ========================================
     {
-        fprintf(stderr, "[Step 5] VAE semantic encoding...\n");
-
-        std::vector<float> semantic_features(expected_frames * semantic_dim);
-        float semantic_time_ms = 0.0f;
-
-        int32_t semantic_frames = vae_encode_semantic_with_timing(
-            vae_ctx, audio.samples.data(), n_samples,
-            semantic_features.data(), &semantic_time_ms);
-
         if (semantic_frames < 0) {
             fprintf(stderr, "Error: VAE semantic encoding failed\n");
             goto cleanup;
@@ -500,6 +574,11 @@ int main(int argc, char ** argv) {
         fprintf(stderr, "  LM model loading:     %8.1f ms\n", lm_load_time);
         fprintf(stderr, "  VAE acoustic encode:  %8.1f ms\n", (double)acoustic_time_ms);
         fprintf(stderr, "  VAE semantic encode:  %8.1f ms\n", (double)semantic_time_ms);
+        if (vae_parallel_ms > 0.0) {
+            // Wall clock of the overlapped pair; per-encoder lines above overlap in
+            // time and must not be summed. Harness scripts prefer this line.
+            fprintf(stderr, "  VAE parallel encode:  %8.1f ms\n", vae_parallel_ms);
+        }
         fprintf(stderr, "  Prompt build:         %8.1f ms\n", prompt_build_time);
         fprintf(stderr, "  LM prefill:           %8.1f ms (%d tokens)\n", prefill_time, n_prompt_tokens);
         fprintf(stderr, "  LM decode:            %8.1f ms (%d tokens, %.2f ms/tok)\n",
