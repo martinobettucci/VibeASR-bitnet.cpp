@@ -1,0 +1,446 @@
+{
+ "summary": {
+  "short/upstream": {
+   "wer": 8.413477140760195,
+   "compute_s": 178.40220000000002,
+   "vs_upstream": 1.0,
+   "n": 7
+  },
+  "short/this fork": {
+   "wer": 8.732055276239738,
+   "compute_s": 56.5582,
+   "vs_upstream": 3.1543118416074067,
+   "n": 7
+  },
+  "short/whisper-small": {
+   "wer": 5.788255172057989,
+   "compute_s": 49.781980000000004,
+   "vs_upstream": 3.5836702356957275,
+   "n": 7
+  },
+  "short/whisper-turbo": {
+   "wer": 2.3864339885466648,
+   "compute_s": 164.69414,
+   "vs_upstream": 1.0832334410926825,
+   "n": 7
+  },
+  "long/upstream": {
+   "wer": 58.377959248547015,
+   "compute_s": 364.9857,
+   "vs_upstream": 1.0,
+   "n": 7
+  },
+  "long/this fork": {
+   "wer": 95.86371126411554,
+   "compute_s": 128.61800000000002,
+   "vs_upstream": 2.837749770638635,
+   "n": 7
+  },
+  "long/whisper-small": {
+   "wer": 22.68279810817907,
+   "compute_s": 94.44963,
+   "vs_upstream": 3.864342295464789,
+   "n": 7
+  },
+  "long/whisper-turbo": {
+   "wer": 17.049664622942498,
+   "compute_s": 329.67255,
+   "vs_upstream": 1.107115833574861,
+   "n": 7
+  }
+ },
+ "records": [
+  {
+   "item": "en_us_short",
+   "lang": "en_us",
+   "regime": "short",
+   "duration": 15.56,
+   "engines": {
+    "this fork": {
+     "wer": 8.823529411764707,
+     "compute_ms": 5772.5,
+     "hyp": "These can be seen at what it is about certain people that make them want the things that they do and what things in their environment will make them do or not do certain things."
+    },
+    "upstream": {
+     "wer": 8.823529411764707,
+     "compute_ms": 18470.3,
+     "hyp": "These can be seen at what it is about certain people that make them want the things that they do. And what things in their environment will make them do or not do certain things."
+    },
+    "whisper-small": {
+     "wer": 2.9411764705882355,
+     "compute_ms": 6059.48,
+     "hyp": "These things look at what it is about certain people that make them want the things that they do and what things in their environment will make them do or not do certain things."
+    },
+    "whisper-turbo": {
+     "wer": 0.0,
+     "compute_ms": 22650.69,
+     "hyp": "These theories look at what it is about certain people that make them want the things that they do and what things in their environment will make them do or not do certain things."
+    }
+   }
+  },
+  {
+   "item": "en_us_long",
+   "lang": "en_us",
+   "regime": "long",
+   "duration": 37.0,
+   "engines": {
+    "this fork": {
+     "wer": 643.1818181818181,
+     "compute_ms": 32404.3,
+     "hyp": "Alloys are basically a mixture of two or more metals. Don't forget there are many elements on the periodic table. And I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you. I have a question for you."
+    },
+    "upstream": {
+     "wer": 362.5,
+     "compute_ms": 60362.8,
+     "hyp": "Owls are basically a mixture of two or more metals. Don't forget there are many elements on a priori. I should have told you so. I have been having a great deal of conversation over the last several weeks with some of the captains of the ship because, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think, I think,"
+    },
+    "whisper-small": {
+     "wer": 59.09090909090909,
+     "compute_ms": 12043.7,
+     "hyp": "Alloys are basically a mixture of two or more metals. Don't forget there are many elements on the PRID table. the world's say for you always begin with a capital letter even in the middle of a sentence."
+    },
+    "whisper-turbo": {
+     "wer": 57.95454545454545,
+     "compute_ms": 44582.85,
+     "hyp": "Alloys are basically a mixture of two or more metals. Don't forget there are many elements on the periodic table. What the words say for you always begin with a capital letter even in the middle of a sentence."
+    }
+   }
+  },
+  {
+   "item": "fr_fr_short",
+   "lang": "fr_fr",
+   "regime": "short",
+   "duration": 23.4,
+   "engines": {
+    "this fork": {
+     "wer": 11.11111111111111,
+     "compute_ms": 10207.2,
+     "hyp": "Nous sommes d'accord avec la déclaration de l'USOC, Comité olympique d'États-Unis. Selon laquelle les intérêts de nos athlètes et de nos clubs ainsi que de leur sport pourtent peut-être mieux servi. Cela peut être fait en allant de l'avant et en procédant plutôt à des changements significatifs au sein de notre organisation. Qu'à la révocation de la gravitation."
+    },
+    "upstream": {
+     "wer": 9.523809523809524,
+     "compute_ms": 28807.500000000004,
+     "hyp": "Nous sommes d'accord avec la déclaration de l'USOC, Comité Olympique des États-Unis. Selon laquelle les intérêts de nos athlètes et de nos clubs ainsi que de leur sport, pourtent peut-être mieux sa vie. Cela peut être fait en allant de l'avant et en procédant plutôt à des changements significatifs au sein de notre organisation, qu'à la révocation de la accréditation."
+    },
+    "whisper-small": {
+     "wer": 3.1746031746031744,
+     "compute_ms": 8394.15,
+     "hyp": "Nous sommes d'accord avec la déclaration de l'USOC, comité olympique des États-Unis, selon laquelle les intérêts de nos athlètes et de nos clubs, ainsi que de leur sport, pourraient être au mieux servi. Cela peut être fait en allant de l'avant et en procédant plutôt à des changements significatifs au sein de notre organisation qu'à la révocation d'accréditation."
+    },
+    "whisper-turbo": {
+     "wer": 0.0,
+     "compute_ms": 24538.949999999997,
+     "hyp": "Nous sommes d'accord avec la déclaration de l'USOC, Comité Olympique des États-Unis, selon laquelle les intérêts de nos athlètes et de nos clubs, ainsi que de leur sport, pourraient être mieux servis. Cela peut être fait en allant de l'avant et en procédant plutôt à des changements significatifs au sein de notre organisation qu'à la révocation d'accréditation."
+    }
+   }
+  },
+  {
+   "item": "fr_fr_long",
+   "lang": "fr_fr",
+   "regime": "long",
+   "duration": 38.82,
+   "engines": {
+    "this fork": {
+     "wer": 16.10169491525424,
+     "compute_ms": 15887.9,
+     "hyp": "Tous les noms suivis du mot ci qui signifie vous commencent toujours par une majuscule même au milieu d'une phrase. Par exemple, le format de photographie le plus courant du monde est le trente-cinq millimètres. Quel format de pellicule le plus répandu à la fin du verset chinois analogique. Nous sommes d'accord avec la déclaration de l'USOC, Comité olympique des États-Unis, selon laquelle les intérêts de nos athlètes et de nos clubs ainsi que de leur sport pour cette tête ont mieux servi. Cela peut être fait en allant de l'avant et en procédant plutôt à des changements significatifs au sein de notre organisation qu'à la révocation de la accréditation."
+    },
+    "upstream": {
+     "wer": 16.10169491525424,
+     "compute_ms": 48479.5,
+     "hyp": "Tous les noms suivis du mot ci qui signifie vous commencent toujours par une majuscule même au milieu d'une phrase. Par exemple, le format de photographie le plus courant du monde est le trente-cinq millimètres. Quel format de pellicule le plus répandu à la fin du verset film analogique. Nous sommes d'accord avec la déclaration de l'USOC, comité olympique des États-Unis, selon laquelle les intérêts de nos athlètes et de nos clubs ainsi que de leur sport pourtent peut-être mieux sa vie. Cela peut être fait en allant de l'avant et en procédant plutôt à des changements significatifs au sein de notre organisation qu'à la révocation de la gravitation."
+    },
+    "whisper-small": {
+     "wer": 37.28813559322034,
+     "compute_ms": 13464.15,
+     "hyp": "Tous les noms suivis du mot \"si\" qui signifie \"vous\" commencent toujours par une majuscule, même au milieu d'une phrase. Par exemple, le format de photographie le plus courant du monde est le 35mm, c'était le format de pellicule le plus répandu à la fin de l'ère de films analogiques. En allant de l'avant et en procédant plutôt à des changements significatifs au sein de notre organisation qu'à la révocation d'accréditation."
+    },
+    "whisper-turbo": {
+     "wer": 5.932203389830509,
+     "compute_ms": 48010.95,
+     "hyp": "Tous les noms suivis du mot « si » qui signifie « vous » commencent toujours par une majuscule, même au milieu d'une phrase. Par exemple, le format de photographie le plus courant du monde est le 35 mm. C'était le format de pellicule le plus répandu à la fin de l'ère des films analogiques. Nous sommes d'accord avec la déclaration de l'USOC, comité olympique des Etats-Unis, selon laquelle les intérêts de nos athlètes et de nos clubs, ainsi que de leur sport, pourraient être mieux servis. En allant de l'avant et en procédant plutôt à des changements significatifs au sein de notre organisation qu'à la révocation d'accréditation."
+    }
+   }
+  },
+  {
+   "item": "it_it_short",
+   "lang": "it_it",
+   "regime": "short",
+   "duration": 22.8,
+   "engines": {
+    "this fork": {
+     "wer": 6.451612903225806,
+     "compute_ms": 8128.9,
+     "hyp": "Il lancio del satellite nello spazio è stato effettuato con un razzo. Gli scienziati ricorrono ai telescopi spaziali perché l'atmosfera della Terra distorce in parte la luce e l'adisuale."
+    },
+    "upstream": {
+     "wer": 6.451612903225806,
+     "compute_ms": 26008.100000000002,
+     "hyp": "Il lancio del satellite nello spazio è stato effettuato con un razzo. Gli scienziati ricorrono ai telescopi spaziali perché l'atmosfera della Terra distorce in parte la luce e l'adisuole."
+    },
+    "whisper-small": {
+     "wer": 0.0,
+     "compute_ms": 6730.6900000000005,
+     "hyp": "Il lancio del satellite nello spazio è stato effettuato con un razzo. Gli scienziati ricorrono ai telescopi spaziali perché l'atmosfera della terra distorce in parte la luce e la visuale."
+    },
+    "whisper-turbo": {
+     "wer": 0.0,
+     "compute_ms": 23300.49,
+     "hyp": "Il lancio del satellite nello spazio è stato effettuato con un razzo. Gli scienziati ricorrono ai telescopi spaziali perché l'atmosfera della Terra distorce in parte la luce e la visuale."
+    }
+   }
+  },
+  {
+   "item": "it_it_long",
+   "lang": "it_it",
+   "regime": "long",
+   "duration": 41.58,
+   "engines": {
+    "this fork": {
+     "wer": 20.512820512820515,
+     "compute_ms": 16563.4,
+     "hyp": "Secondo il sovrintendente della pulizia, Chandra Sekkar Cholanki, gli imputati sono apparsi in tribunale con il volto coperto. L'iniziativa contro le uscinità è stata finanziata dal congresso a partire dall'anno fiscale duemila e cinque, con la specifica richiesta all' F B I di assegnare dieci agenti alla pornografia per adulti. L'iniziativa contro le uscinità è stata finanziata dal congresso a partire dall'anno fiscale duemila cinque, con la specifica richiesta all' F B I di assegnare dieci agenti alla pornografia per adulti."
+    },
+    "upstream": {
+     "wer": 20.512820512820515,
+     "compute_ms": 54503.9,
+     "hyp": "Secondo il sovrintendente della pulizia, Chandra Sekkar Cholanki, gli imputati sono apparsi in tribunale con il volto coperto. L'iniziativa contro le uscinità è stata finanziata dal congresso a partire dall'anno fiscale duemila e cinque, con la specifica richiesta all'F B I di assegnare dieci agenti alla pornografia per adulti. L'iniziativa contro le uscinità è stata finanziata dal congresso a partire dall'anno fiscale duemila cinque, con la specifica richiesta all'F B I di assegnare dieci agenti alla pornografia per adulti."
+    },
+    "whisper-small": {
+     "wer": 6.410256410256411,
+     "compute_ms": 12323.66,
+     "hyp": "Secondo il sovrintendente della polizia Chandra Sekkar Solanki, gli imputati sono apparsi in tribunale con il volto coperto. L'iniziativa \"Contro le uscinità\" è stata finanziata dal Congresso a partire dall'anno fiscale 2005, con la specifica richiesta all'FBI di assegnare 10 agenti alla pornografia per adulti. \"Contro le uscinità\" è stata finanziata dal Congresso a partire dall'anno fiscale 2005, con la specifica richiesta all'FBI di assegnare 10 agenti alla pornografia per adulti."
+    },
+    "whisper-turbo": {
+     "wer": 15.384615384615385,
+     "compute_ms": 46602.95,
+     "hyp": "Secondo il sovrintendente della polizia Chandra Sekar Solanki, gli imputati sono apparsi in tribunale con il volto coperto. L'iniziativa contro le uscinità è stata finanziata dal congresso a partire dall'anno fiscale 2005, con la specifica richiesta all'FBI di assegnare 10 agenti alla pornografia per adulti. Grazie a tutti i nostri spieghi e a partire dall'anno fiscale 2005, con la specifica richiesta all'FBI di assegnare 10 agenti alla pornografia per adulti."
+    }
+   }
+  },
+  {
+   "item": "pt_br_short",
+   "lang": "pt_br",
+   "regime": "short",
+   "duration": 20.94,
+   "engines": {
+    "this fork": {
+     "wer": 0.0,
+     "compute_ms": 7341.2,
+     "hyp": "Ademais, entre cada dinastia havia uma era instável de províncias divididas. O mais conhecido desses períodos foi a época dos três reinos, que ocorreu por sessenta anos entre as dinastias Han e Jin."
+    },
+    "upstream": {
+     "wer": 0.0,
+     "compute_ms": 24486.000000000004,
+     "hyp": "Ademais, entre cada dinastia havia uma era instável de províncias divididas. O mais conhecido desses períodos foi a época dos três reinos, que ocorreu por sessenta anos entre as dinastias Han e Jin."
+    },
+    "whisper-small": {
+     "wer": 6.0606060606060606,
+     "compute_ms": 6881.580000000001,
+     "hyp": "A demais, entre cada dinastia havia uma era instável de províncias divididas. O mais conhecido desses períodos foi a época dos Três Reinos, que ocorreu por 60 anos entre as dinastias Han e Jin."
+    },
+    "whisper-turbo": {
+     "wer": 0.0,
+     "compute_ms": 23033.42,
+     "hyp": "Ademais, entre cada dinastia havia uma era instável de províncias divididas. O mais conhecido desses períodos foi a época dos três reinos, que ocorreu por 60 anos entre as dinastias Han e Jin."
+    }
+   }
+  },
+  {
+   "item": "pt_br_long",
+   "lang": "pt_br",
+   "regime": "long",
+   "duration": 43.26,
+   "engines": {
+    "this fork": {
+     "wer": 2.272727272727273,
+     "compute_ms": 15722.4,
+     "hyp": "O romantismo tinha um grande elemento de determinismo cultural, extraído de escritores como Roth, Fichte e Schelinger. Ele não definiu um valor para os cortes, falando que eles serão feitos de acordo com a produção econômica da China. O congresso começou a financiar a iniciativa de obscenidade no ano fiscal de dois mil e cinco. E especificou que o FBI deve dedicar dez agentes à pornografia adulta. Cuidado para não deixar o tecido esquentar muito, o que pode fazê-lo encolher ou, em casos mais graves, causar queimaduras."
+    },
+    "upstream": {
+     "wer": 2.272727272727273,
+     "compute_ms": 52431.00000000001,
+     "hyp": "O romantismo tinha um grande elemento de determinismo cultural, extraído de escritores como Gotts, Fichte e Scheller. Ele não definiu um valor para os cortes, falando que eles serão feitos de acordo com a produção econômica da China. O congresso começou a financiar a iniciativa de obscenidade no ano fiscal de dois mil e cinco, e especificou que o FBI deve dedicar dez agentes à pornografia adulta. Cuidado para não deixar o tecido esquentar muito, o que pode fazê-lo encolher ou, em casos mais graves, causar queimaduras."
+    },
+    "whisper-small": {
+     "wer": 6.818181818181818,
+     "compute_ms": 12791.91,
+     "hyp": "O romantismo tinha um grande elemento de determinismo cultural, extraído de escritores como Goat, Fist e Skellige. Ele não define um valor para os cortes, falando que eles serão feitos de acordo com a produção econômica da China. O Congresso começou a financiar a iniciativa de obscenidade no ano fiscal de 2005 e especificou que o FBI deve dedicar 10 agentes para a pornografia adulta. Cuidado para não deixar o tecido esquentar muito o que pode fazê-lo encolher ou, em casos mais graves, causar queimaduras."
+    },
+    "whisper-turbo": {
+     "wer": 11.363636363636363,
+     "compute_ms": 47135.24,
+     "hyp": "O romantismo tinha um grande elemento de determinismo cultural, extraído de escritores como Goethe, Fichte e Skellige. Ele não definiu um valor para os cortes, falando que eles serão feitos de acordo com a produção econômica da China. O Congresso começou a financiar a iniciativa de obscenidade no ano fiscal de 2005 e a pornografia adulta. Cuidado para não deixar o tecido esquentar muito, o que pode fazê-lo encolher ou, em casos mais graves, causar queimaduras."
+    }
+   }
+  },
+  {
+   "item": "es_419_short",
+   "lang": "es_419",
+   "regime": "short",
+   "duration": 24.96,
+   "engines": {
+    "this fork": {
+     "wer": 1.9607843137254901,
+     "compute_ms": 8951.9,
+     "hyp": "Por ejemplo, todos los años, los alumnos de la escuela Bennet en Carolina del Norte diseñan una página web acerca de su viaje a la capital del Estado, y cada año la página se actualiza, pero se conservan en línea las versiones previas en la forma de álbum de recuerdos."
+    },
+    "upstream": {
+     "wer": 1.9607843137254901,
+     "compute_ms": 28918.4,
+     "hyp": "Por ejemplo, todos los años, los alumnos de la escuela Bennet en Carolina del Norte diseñan una página web acerca de su viaje a la capital del Estado, y cada año la página se actualiza, pero se conservan en línea las versiones previas en la forma de álbum de recuerdos."
+    },
+    "whisper-small": {
+     "wer": 3.9215686274509802,
+     "compute_ms": 6828.05,
+     "hyp": "Por ejemplo, todos los años los alumnos de la escuela Bennett en Carolina del Norte diseñan una página web acerca de su viaje a la capital del estado y cada año la página se actualiza pero se conservan en línea las versiones previas en la forma de álbum de recuerdos."
+    },
+    "whisper-turbo": {
+     "wer": 1.9607843137254901,
+     "compute_ms": 23567.199999999997,
+     "hyp": "Por ejemplo, todos los años los alumnos de la escuela Bennet en Carolina del Norte diseñan una página web acerca de su viaje a la capital del estado y cada año la página se actualiza pero se conservan en línea las versiones previas en la forma de álbum de recuerdos."
+    }
+   }
+  },
+  {
+   "item": "es_419_long",
+   "lang": "es_419",
+   "regime": "long",
+   "duration": 36.36,
+   "engines": {
+    "this fork": {
+     "wer": 0.0,
+     "compute_ms": 13731.1,
+     "hyp": "No se trata, sin embargo, de una experimentación. Es una prueba que se usa para descartar una o más de las posibles hipótesis, haciendo preguntas y observaciones que guían la investigación científica. Desde siempre, la función de la Marina ha sido garantizar que su país conserve la facultad de trasladar a su población y mercancías, a la vez que interfiere con la capacidad del enemigo para hacer lo propio. No ha podido tomarse medicamentos para aliviar el dolor porque está prohibido su uso en los juegos."
+    },
+    "upstream": {
+     "wer": 0.0,
+     "compute_ms": 43720.799999999996,
+     "hyp": "No se trata, sin embargo, de una experimentación. Es una prueba que se usa para descartar una o más de las posibles hipótesis haciendo preguntas y observaciones que guían la investigación científica. Desde siempre, la función de la Marina ha sido garantizar que su país conserve la facultad de trasladar a su población y mercancías, a la vez que interfiere con la capacidad del enemigo para hacer lo propio. No ha podido tomarse medicamentos para aliviar el dolor, porque está prohibido su uso en los juegos."
+    },
+    "whisper-small": {
+     "wer": 9.30232558139535,
+     "compute_ms": 13347.29,
+     "hyp": "No se trata, sin embargo, de una experimentación. Es una prueba que se usa para descartar una o más de las posibles hipótesis haciendo preguntas y observaciones que guían la investigación científica. Desde siempre, la función de la marina ha sido garantizar que su país conserve la facultad de trasladar a su población y mercancías, a la vez que interfiere con la capacidad del enemigo para hacerlo propio. ¿Qué es el sentido de tomarse medicamentos para liviar el dolor? Porque está prohibido su uso en los juegos."
+    },
+    "whisper-turbo": {
+     "wer": 6.976744186046512,
+     "compute_ms": 47244.01,
+     "hyp": "No se trata, sin embargo, de una experimentación. Es una prueba que se usa para descartar una o más de las posibles hipótesis haciendo preguntas y observaciones que guían la investigación científica. Desde siempre, la función de la marina ha sido garantizar que su país conserve la facultad de trasladar a su población y mercancías, a la vez que interfiere con la capacidad del enemigo para hacer lo propio. La función de la marina ha sido tomarse medicamentos para aliviar el dolor porque está prohibido su uso en los juegos."
+    }
+   }
+  },
+  {
+   "item": "de_de_short",
+   "lang": "de_de",
+   "regime": "short",
+   "duration": 23.04,
+   "engines": {
+    "this fork": {
+     "wer": 7.6923076923076925,
+     "compute_ms": 8001.4,
+     "hyp": "Während Goma einigermaßen sicher ist, sollte jeder Aufenthalt außer Gomas sorgfältig geplant werden. Um den Stand der in der Provinz Nord-GU andauernden Kämpfe zu erfahren."
+    },
+    "upstream": {
+     "wer": 7.6923076923076925,
+     "compute_ms": 27387.2,
+     "hyp": "Während Goma einigermaßen sicher ist, sollte jeder Aufenthalt außer Gomas Sorgfältig geplant werden. Um den Stand der in der Provinz Nord-Giwu andauernden Kämpfe zu erfahren."
+    },
+    "whisper-small": {
+     "wer": 19.23076923076923,
+     "compute_ms": 6471.469999999999,
+     "hyp": "Während Goma einigermaßen sicher ist, sollte jeder Offenthalt außer Gomas sorgfältig geplant werden, um den Stand der in der Provinz Nordkivu andauenden Kämpfe zu erfahren."
+    },
+    "whisper-turbo": {
+     "wer": 11.538461538461538,
+     "compute_ms": 23553.2,
+     "hyp": "Während Goma einigermaßen sicher ist, sollte jeder Aufenthalt außer Gomas sorgfältig geplant werden, um den Stand der in der Provinz Nordkivu andauernden Kämpfe zu erfahren."
+    }
+   }
+  },
+  {
+   "item": "de_de_long",
+   "lang": "de_de",
+   "regime": "long",
+   "duration": 47.82,
+   "engines": {
+    "this fork": {
+     "wer": 17.857142857142858,
+     "compute_ms": 19677.300000000003,
+     "hyp": "Dem Weg zufolge bezieht sich das Dokument auf den Grenzstreit, in dem die Palästinenser einen zurücksetzen, der Grenze mit dem Zustand vor dem Sextal-Ekrieg von fünfzehnhundert siebenundsechzig fordern. Ätherisches Verhalten ist nicht so gleichmäßig wie das ä- große Höhlen auf der Erde, die oft eine ziemlich konstante Temperatur haben, aber es stimmt damit überein, dass es sich um tiefe Löcher am Boden handelt. Nacktglehen-Kuscheln vom Astrolo- Geologie-Team des United States Geological Survey, USGS und der Northern Arizona University in Flagstaff, Arizona. In seinem Artikel, die Rete des Präsidenten, zeigte Oliver Sacks auf, wie Leute, die wegen eines Hirnschadens keine Sprache mehr verstehen können, trotzdem die Ehrlichkeit von Menschen richtig einschätzen können."
+    },
+    "upstream": {
+     "wer": 17.857142857142858,
+     "compute_ms": 60480.7,
+     "hyp": "Dem liegt zur Folge beziehlich das Dokument auf den Grenzstreifen, den die Palästinenser in Zurücksetzen der Grenzen in den Zustand vor dem Sechstagekrieg von sechzehnhundert siebenundsechzig fordern. Ätherisches Verhalten ist nicht so gleichmäßig wie das ä ä große Höhlen auf der Erde, die oft eine ziemlich konstante Temperatur haben, aber es stimmt damit überein, dass es sich um tiefe Löcher im Boden handelt. Nach Glen Cushing vom Astrolo- Geologie Team des United States Geological Survey, USGS und der Northern Arizona University in Flagstaff, Arizona. In seinem Artikel, die Rete des Präsidenten, zeigte Oliver Sex auf, wie Leute, die wegen eines Hirnschadens keine Sprache mehr verstehen können, trotzdem die Ehrlichkeit von Menschen richtig einschätzen können."
+    },
+    "whisper-small": {
+     "wer": 24.107142857142858,
+     "compute_ms": 16566.96,
+     "hyp": "Dem liegt zufolge bezieht sich das Dokument auf den Grenzstreit, in dem die Palästinenser ein zurücksetzender Grenzen in den Zustand vor dem Sechstagekrieg von 1967 fordern. Ihr thermisches Verhalten ist nicht so gleichmäßig wie das große Höhlen auf der Erde, die oft eine ziemlich konstante Temperatur haben, aber es stimmt damit überein, dass es sich um tiefe Löcher am Boden handelt. In seinem Artikel \"Die Rede des Präsidenten\" zeigte Oliver Sex auf, wie Leute, die wegen eines Höhenschans keine Sprache mehr verstehen können, trotzdem die Ehrlichkeit von Menschen richtig einschätzen können."
+    },
+    "whisper-turbo": {
+     "wer": 3.5714285714285716,
+     "compute_ms": 48508.920000000006,
+     "hyp": "Dem League zufolge bezieht sich das Dokument auf den Grenzstreit, in dem die Palästinenser ein Zurücksetzen der Grenzen in den Zustand vor dem Sechstagekrieg von 1967 fordern. Ihr thermisches Verhalten ist nicht so gleichmäßig wie das großer Höhlen auf der Erde, die oft eine ziemlich konstante Temperatur haben, aber es stimmt damit überein, dass es sich um tiefe Löcher am Boden handelt, sagt Glenn Cushing vom Astrogeologie-Team des United States Geological Survey, USGS und der Northern Arizona University, in Flagstaff, Arizona. In seinem Artikel \"Die Rede des Präsidenten\" zeigte Oliver Sacks auf, wie Leute, die wegen eines Hirnschadens keine Sprache mehr verstehen können, trotzdem die Ehrlichkeit von Menschen richtig einschätzen können."
+    }
+   }
+  },
+  {
+   "item": "fr_mls_short",
+   "lang": "fr_mls",
+   "regime": "short",
+   "duration": 19.75,
+   "engines": {
+    "this fork": {
+     "wer": 19.642857142857142,
+     "compute_ms": 8155.099999999999,
+     "hyp": "Dinarsal prit alors la parole, ma sœur dit-elle, on ne peut mieux tenir cette promesse que vous teniez à vendre. Ce compte est assurément plus surprenant que les autres, ma sœur répondit la sultanne, vous entendrez des choses qui vous causeront encore plus d'admiration. Si le sultan monseigneur me permet de vous les raconter."
+    },
+    "upstream": {
+     "wer": 19.642857142857142,
+     "compute_ms": 24324.699999999997,
+     "hyp": "Dinosaures, prie alors la parole, ma sœur dit-elle, on ne peut mieux tenir cette promesse que vous teniez à vendre. Ce compte est assurément plus surprenant que les autres, ma sœur répondit la sultane, vous entendrez des choses qui vous causeront encore plus d'admiration. Si le sultan monseigneur me permet de vous les raconter."
+    },
+    "whisper-small": {
+     "wer": 8.928571428571429,
+     "compute_ms": 8416.56,
+     "hyp": "Dinarzad prie alors la parole. « Ma sœur, dit-elle, on ne peut mieux tenir sa promesse que vous tenez la vôtre. » Ce conte est assurément plus surprenant que les autres. Ma sœur répondit la sultan. « Vous entendrez des choses qui vous causeront encore plus d'admiration, si le sultan, mon seigneur, me permet de vous les raconter."
+    },
+    "whisper-turbo": {
+     "wer": 5.357142857142857,
+     "compute_ms": 24050.190000000002,
+     "hyp": "dinarzade prit alors la parole ma soeur dit-elle on ne peut mieux tenir sa promesse que vous tenez la vôtre ce conte est assurément plus surprenant que les autres ma soeur répondit la sultane vous entendrez des choses qui vous causeront encore plus d'admiration si le sultan monseigneur me permet de vous les raconter"
+    }
+   }
+  },
+  {
+   "item": "fr_mls_long",
+   "lang": "fr_mls",
+   "regime": "long",
+   "duration": 35.79,
+   "engines": {
+    "this fork": {
+     "wer": 12.727272727272727,
+     "compute_ms": 14631.6,
+     "hyp": "Pendant le second siècle, je fis serment d'ouvrir tous les trésors de la terre à quiconque me mettrait en liberté, mais je ne suis pas plus heureux. Dans le troisième, je promis de faire puissant mon arque, mon libérateur, d'être toujours près de lui en esprit. Non, ta mort est certaine, dit le génie, choisis seulement de quelle sorte tu veux que je te fasse mourir. Le pêcheur le voyant dans les résolutions de Lietzwee en eut une douleur extrême. Non battant pour l'amour de lui qu'à cause de ses trois enfants n'ont eu cligné le misère où ils allaient être réduits par sa mort."
+    },
+    "upstream": {
+     "wer": 11.818181818181818,
+     "compute_ms": 45007.0,
+     "hyp": "Pendant le second siècle, je fis serment d'ouvrir tous les trésors de la terre à quiconque me mettrait en liberté, mais je ne suis pas plus heureux. Dans le troisième, je promis de faire puissant mon arque, mon libérateur, d'être toujours près de lui en esprit. Non, ta mort est certaine, dit le génie, choisis seulement de quelle sorte tu veux que je te fasse mourir. Le pêcheur le voyant dans les résolutions de Lietzwee en eut une douleur extrême. Non battant pour l'amour de lui qu'à cause de ses trois enfants n'ont-ils cligné la misère où ils allaient être réduits par sa mort?"
+    },
+    "whisper-small": {
+     "wer": 10.909090909090908,
+     "compute_ms": 13911.960000000001,
+     "hyp": "Pendant le second siècle, je fis serment d'ouvrir tous les trésors de la terre, à qui compte mes maîtrais en liberté. Mais je ne fus pas plus heureux. Dans le troisième, je promis de faire puissant mon arc, mon libérateur, d'être toujours près de lui en esprit. \"Non, ta mort est certaine\", dit le génie. \"Choisis seulement de quelle sorte tu veux que je te fasse mourir.\" Le pêcheur, le voyant dans les résolutions de le tuer, enut une douleur extrême, non pas tant pour l'amour de lui à cause de ses trois enfants dont il clingait la misère où ils allaient être réduits par sa mort."
+    },
+    "whisper-turbo": {
+     "wer": 22.727272727272727,
+     "compute_ms": 47587.63,
+     "hyp": "Pendant le second siècle, je fis serment d'ouvrir tous les trésors de la terre à quiconque me mettrait en liberté. Mais je ne fus pas plus heureux. Dans le troisième, je promis de faire puissant monarque mon libérateur, d'être toujours près de lui en esprit. « Non, ta mort est certaine, » dit le génie. « Choisis seulement de quelle sorte tu veux que je te fasse mourir. » « Qu'est-ce qu'à cause de ces trois enfants dont il plaignait la misère ou ils allaient être réduits par sa mort ? »"
+    }
+   }
+  }
+ ]
+}
