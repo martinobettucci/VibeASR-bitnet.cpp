@@ -222,6 +222,27 @@ serves every x86-64-with-AVX2 host and still lights up VNNI where present.
   every core it is given: pinned 2+2 measured 6.25 s vs 3.44 s sequential. The
   machinery ships default-on at ≥ 6 threads (`VIBEASR_PAR_ENC=1/0` forces).
 
+### Runtime switches
+
+Every optimisation ships with its kill switch, so any single step can be A/B'd on
+any host. Defaults are what the benchmarks above measure.
+
+| Switch | Default | Effect of overriding | Measured basis for the default |
+|:--|:--|:--|:--|
+| `VIBEASR_GEMM_PACKED=0` | on | unfused tiled GEMM + separate dequant pass | packed: acoustic 1.26×, bit-exact |
+| `VIBEASR_CONV_GEMM=0` | on | im2col + transpose downsampling | conv-as-GEMM: VAE 1.44×, bit-exact |
+| `VIBEASR_RES_FUSE=0` | on | unfused ADD_SCALED chain (bit-exact mode) | fusion: 1.17× corpus at +0.04 WER |
+| `VIBEASR_DWCONV=0` | on | permute/im2col mixer chain | dw_direct: 1.40–1.46×, bit-exact |
+| `VIBEASR_PAR_ENC=1/0` | on at ≥ 6 threads | force/forbid concurrent encoders | loses on 4 cores (6.25 s vs 3.44 s) |
+| `VIBEASR_GEMM_TILE=0` | on | pre-tile blocked vec_dot (fallback path only) | tile: ~2× kernel throughput |
+| `VIBEASR_I2_NX1_VNNI=1` | off | VNNI for LM I2_S Nx1 | AVX2 measured faster (87 vs 45 GMAC/s) |
+| `VIBEASR_ISA=avx2\|avx512\|vnni` | auto | cap the dispatched ISA | — |
+| `VIBEASR_ISA_VERBOSE=1` | off | print the dispatched ISA at start | — |
+| `VIBEASR_NODE_PROFILE=1` | off | per-node/section graph profiler | (run with `VIBEASR_PAR_ENC=0`) |
+| `VIBEASR_KERNEL_STATS=1` | off | per-kernel time/GMAC table at exit | — |
+| `VIBEASR_GEMM_SHAPES=1` | off | print every GEMM call's shape | the tile-tuning census |
+| `VIBEASR_STAGE6_PROJ=<f>` / `VIBEASR_TAP_STAGE` / `VIBEASR_TAP_MARKS` | off | stage-6 truncation apparatus | negative result, kept on record |
+
 ### Tools this added
 
 | | |
