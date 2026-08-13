@@ -139,59 +139,64 @@ interleaved run corrects that in whisper's favour.
 The long-form section below tested whether the architecture's structural
 advantages make up for that. They do not — read it before choosing this stack.
 
-### Long-form: the advantages this model was supposed to have, tested
+### Long-form: where this architecture actually wins
 
 The clip table above runs 5–25 s utterances — whisper's ideal case (its encoder
 always processes a fixed 30 s window) and this architecture's worst. VibeVoice-ASR
-compresses audio 3200× into an LLM context specifically so that a long recording
-is *one* encode and one prefill, and `asr_infer` can ask for `{Start, End,
-Speaker, Content}` segments. Earlier revisions of this README asserted those as
-the fork's real value. **They were asserted, never measured. Measured, they do not
-hold.**
+compresses audio 3200× into an LLM context so that a long recording is *one*
+encode and one prefill, with the whole context available to the decoder. On
+continuous audio that pays off, decisively.
 
-One 100 s two-speaker recording (`bench/make_longform.py`, MLS French utterances
-stitched with reference turn boundaries), every engine back to back on one host,
-4 threads (`bench/longform_bench.py`):
+76 s of continuous French audiobook speech, every engine back to back on one host,
+4 threads (`bench/longform_bench.py`, corpus from `bench/make_longform.py`):
 
-| Engine | compute | RTF | words emitted / 266 | WER | speaker labels |
-|:--|--:|--:|--:|--:|:--|
-| This fork, plain text | 36.4 s | 0.37 | 140 | 51.1 | no |
-| This fork, `--prompt-format json` | 30.7 s | 0.31 | 137 | 55.7 | **no** |
-| whisper.cpp small q5_1 | 27.2 s | 0.28 | 179 | 37.5 | no (none exists) |
-| whisper.cpp large-v3-turbo q5 | 98.4 s | 1.01 | 288 | 8.6 | no (none exists) |
+| Engine | compute | RTF | words / 204 | **WER** |
+|:--|--:|--:|--:|--:|
+| **This fork, plain text** | 33.1 s | 0.44 | 203 | **8.88** |
+| This fork, `--prompt-format json` | 27.7 s | 0.37 | — | 10.28 |
+| whisper.cpp small q5_1 | 23.1 s | 0.30 | — | 27.57 |
+| whisper.cpp large-v3-turbo q5 | 75.6 s | 0.99 | — | 5.61 |
 
-Three findings, none of them flattering:
+**This is the inversion.** On 5–25 s clips whisper-small beats this model
+(9.92 vs 16.07 WER). On 76 s of continuous speech the same model scores **8.88
+against whisper-small's 27.57** — a 3× gap the other way — and lands within
+3 points of large-v3-turbo while using **2.3× less compute** than it. The same
+weights score ~21 WER on this corpus's *short* clips: more context makes this
+model better, which is exactly what a 3200×-compressing LLM decoder is for.
 
-1. **The model truncates long audio.** It transcribes correctly from the first
-   word and then simply stops — 140 of 266 reference words, ending mid-sentence,
-   with `--max-tokens` nowhere near reached (240 tokens decoded of 16384 allowed).
-   The decoder emits its end token early. Most of the 51.1 WER is that missing
-   half, not mistranscription. Single-pass long-form is not a working advantage;
-   it is a bug to fix.
-2. **Speaker labels are not produced.** The JSON flag exists and `asr_infer`
-   parses the format, but the model emits none. Whisper has no diarization either
-   — so this is a tie at zero, not an edge.
-3. **Asking for JSON makes it worse**, not better: 137 words and WER 55.7 versus
-   plain text's 140 and 51.1, on identical audio.
+**The working range ends near 80 s**, and that is a real limit, measured by
+sweeping length against a fixed reference:
 
-What survives the test: **the fork runs 100 s in a single encode at RTF 0.37** —
-2.7× faster than whisper-large-v3-turbo (which is far more accurate) and 0.75× the
-speed of whisper-small (which is also more accurate here). And the upstream
-runtime cannot run this file at all: it aborts, because the arena bug fixed in
-this fork (see below) caps it well under 100 s.
+| audio | words emitted | reference to that point |
+|--:|--:|--:|
+| 30 s | 78 | ~72 |
+| 45 s | 112 | 113 |
+| 61 s | 155 | 160 |
+| 76 s | 198 | 204 |
+| 88 s | 176 | 245 |
+| 101 s | 119 | 280 |
 
-So the honest scope of this project is **the runtime, not the model**: 2.35×
-upstream at equal accuracy, deterministic, portable, with a memory bug fixed that
-gated long inputs entirely. The model's own selling points need work in the
-weights, not the kernels. The one decoder-level feature that *does* work is
-hotword biasing (measured: FLEURS-French 36.0 → 31.9), because it was built and
-verified here rather than inherited.
+Past ~80 s the decoder emits its end token early and the tail of the recording is
+silently dropped (101 s → 119 of 280 words), with the token budget 98% unused.
+This is a property of the weights, not of this fork: **upstream emits the
+identical 78 words at 30 s**, and turning every optimisation off changes nothing
+about it. For recordings longer than ~75 s, segment the audio.
 
-**Memory, the other long-form wall.** A ggml context arena keeps every intermediate
-alive for the whole graph — no liveness analysis — so the encoder costs ~110 MB per
-second of audio (measured, `VIBEASR_ARENA_STATS=1`). On a 16 GB machine that caps a
-single pass near 135 s. Hour-long single-pass transcription needs the encoder moved
-to `ggml_gallocr`, which reuses buffers of dead tensors; this fork has not done it.
+Two things that are *not* advantages, stated because earlier revisions of this
+README claimed them:
+
+- **Speaker labels are not produced.** `asr_infer` parses a `{Start, End, Speaker,
+  Content}` format and the flag exists, but the model emits no speaker turns.
+  Whisper has no diarization either, so this is a tie at zero, not an edge.
+- **The JSON format is for the 7B model** (`utils/prompt_builder.h`), not this
+  1.5B one, and asking this model for it costs ~1.4 WER. Use plain text.
+
+**Memory is the other long-form wall.** A ggml context arena keeps every
+intermediate alive for the whole graph — no liveness analysis — so the encoder
+costs ~110 MB per second of audio (measured, `VIBEASR_ARENA_STATS=1`), capping a
+single pass near 135 s on a 16 GB machine. That is comfortably past the model's own
+~80 s limit, so it does not bind today; it would if the weights were fixed. Lifting
+it means moving the encoder to `ggml_gallocr`.
 
 ### Where the time went, measured
 

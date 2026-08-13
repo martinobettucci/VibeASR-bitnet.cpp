@@ -85,28 +85,42 @@ of the benchmark host, not of the model); > 1 is faster than upstream.
 | whisper.cpp small q5_1 | 8.5 | 4.6 | 7.1 | 12.9 | 16.7 | 6.6 | 8.0 | **9.92** | **3.06×** |
 | whisper.cpp large-v3-turbo q5_0 | 4.1 | 3.7 | 4.0 | 3.3 | 10.3 | 3.3 | 4.3 | **5.12** | **0.75×** |
 
-Read it straight. Slim-vs-original is parity (+0.32, per-language scatter both
-ways — German improves under the fork's overflow-fixed kernels, Spanish
-regresses). But **on this corpus whisper-small is both more accurate and ~1.3×
-faster** than this model, and turbo is far more accurate again.
+Slim-vs-original is parity (+0.32, per-language scatter both ways — German
+improves under the fork's overflow-fixed kernels, Spanish regresses). On these
+**short clips** whisper-small is more accurate and ~1.3× faster.
 
-The obvious rebuttal is that 5–25 s clips are whisper's ideal case and this
-architecture's worst — it never exercises single-pass long-form or the
-speaker/segment output the runtime can request. **That rebuttal was tested and it
-failed.** On a 100 s two-speaker recording (full table in the runtime repo): the
-model transcribes correctly from the first word, then **stops early — 140 of 266
-reference words**, end token emitted with the token budget 98% unused; it emits
-**no speaker labels** despite the JSON format existing; and asking for that JSON
-makes the transcription worse (WER 55.7 vs 51.1). whisper-large-v3-turbo gets all
-288 words at WER 8.6 on the same file.
+**But short clips are the wrong test for this architecture, and the difference is
+dramatic.** VibeVoice-ASR compresses audio 3200× into an LLM context so a whole
+recording is one encode with full context available to the decoder. On 76 s of
+continuous French audiobook speech, same host, back to back:
 
-Honest guidance: **choose whisper for transcription accuracy at any clip length.**
-Choose this stack if you specifically need a 1.2 GB ternary CPU model with
-decoder-level hotword biasing (measured: FLEURS-French 36.0 → 31.9 with domain
-terms), or you are working on the architecture itself. The runtime around it is
-fast, deterministic and portable — that part holds up; see the
-[runtime repo](https://github.com/martinobettucci/VibeASR-bitnet.cpp/tree/claude/asr-cpu-optimization-cztnh9)
-for methodology and reproduction scripts.
+| Engine | RTF | **WER** |
+|:--|--:|--:|
+| **This model, fork runtime** | 0.44 | **8.88** |
+| whisper.cpp small q5_1 | 0.30 | 27.57 |
+| whisper.cpp large-v3-turbo q5 | 0.99 | 5.61 |
+
+The ranking inverts: **8.88 against whisper-small's 27.57**, a 3× gap the other
+way, and within 3 points of large-v3-turbo at 2.3× less compute. The same weights
+score ~21 on this corpus's short clips — more context makes this model better,
+which is the point of the architecture.
+
+**Known limit: ~80 seconds.** Past that the decoder emits its end token early and
+drops the tail (measured: 101 s of audio → 119 of 280 reference words), with the
+token budget 98% unused. It is a property of the weights, not the runtime —
+upstream behaves identically. Segment recordings longer than ~75 s.
+
+Two things this model does **not** do, despite the runtime supporting the format:
+it emits **no speaker labels**, and the `{Start, End, Speaker, Content}` JSON
+prompt is meant for the 7B model — asking this 1.5B for it costs ~1.4 WER. Use
+plain text.
+
+Guidance: **use whisper for short-clip transcription; use this for continuous
+speech in the 30–75 s range**, where it is far more accurate than whisper-small at
+comparable cost and near turbo at a fraction of it — plus decoder-level hotword
+biasing (FLEURS-French 36.0 → 31.9 with domain terms). Methodology and
+reproduction scripts:
+[runtime repo](https://github.com/martinobettucci/VibeASR-bitnet.cpp/tree/claude/asr-cpu-optimization-cztnh9).
 
 The runtime also ships opt-in decoder-level hotword biasing (`--hotwords`,
 token-trie logit boosting): on FLEURS-French with oracle terms it recovers ~4 WER

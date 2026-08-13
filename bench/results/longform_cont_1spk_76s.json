@@ -1,0 +1,58 @@
+{
+ "wav": "cont_1spk_76s.wav",
+ "duration": 76.0,
+ "n_speakers": 1,
+ "n_turns": 5,
+ "rows": [
+  {
+   "engine": "this fork (plain text)",
+   "compute_ms": 33148.9,
+   "wall_s": 39.40742063522339,
+   "rtf": 0.4361697368421053,
+   "wer": 8.878504672897197,
+   "speakers": false,
+   "hyp": "Pour une fois dans votre vie, vous serez forcée de reconnaître que vous vous êtes trompée. La situation est évidemment sur le point de se dénouer.\nElle fait forcer d'interrompre ses agréables réflexions pour donner quelques éclaircissements à Harriet.\nOui, papa, en effet, elle est écrite à la seconde page de notre cahier. Nous l'avons copiée dans les morceaux choisis. Elle est de garique.\nJe me rappelle seulement qu'elle commençait par Kitty. Vous avez toujours raison, je suppose, je crois, j'espère qu'ils en éteint si cette fois encore. Mais autrement, je l'aurais jamais pu imaginer. Monsieur Elton qui pouvait prétendre à la plus brillante des alliances, quand je pense à ses verts charmants.\nAh, papa, c'est-ce que vous n'avez jamais pu obtenir, et vous n'aurez pas plus de succès cette fois-ci.\nIsabelle ne peut supporter quitter son mari. Cette constatation était trop évidente pour permettre la contradiction. Bien malgré lui, monsieur Woodhouse fut obligé de se soumettre en s'occupant. Monsieur Woodhouse demeura un moment silencieux, puis ajouta.\nMais je ne vois pas pourquoi la pauvre Isabelle serait obligée de rentrer si tôt à cause de son mari. Il faut que je l'aperçoive de prolonger son séjour, elle pourrait parfaitement rester avec les enfants.",
+   "vae_acoustic": 12653.0,
+   "vae_semantic": 5690.2,
+   "prompt_build": 1.0,
+   "prefill": 4063.9,
+   "decode": 10740.8
+  },
+  {
+   "engine": "this fork (JSON segments)",
+   "compute_ms": 27748.199999999997,
+   "wall_s": 31.178037405014038,
+   "rtf": 0.3651078947368421,
+   "wer": 10.280373831775702,
+   "speakers": false,
+   "hyp": "Bon, une fois dans votre vie, vous serez forcée de reconnaître que vous vous êtes trompée. La situation est évidemment sur le point de se dénouer. Elle fait forcer l'interrompre ses agréables réflexions pour donner quelques éclaircissements à Harriet. Oui, papa, en effet, elle est écrite à la seconde page de notre cahier. Nous l'avons copiée dans les morceaux choisis. Elle est de garique. Je me rappelle seulement qu'elle commençait par Kitty. Vous avez toujours raison. Je suppose, je crois, j'espère qu'ils l'ont nettoyée sept fois encore. Mais autrement, je l'aurais jamais pu imaginer.\nMonsieur Elton qui pouvait prétendre à la plus brillante des alliances. Quand je pense à ses verts charmants— Ah, papa, c'est ce que vous n'avez jamais pu obtenir. Et vous n'aurez pas plus de succès cette fois-ci. Isabelle ne peut supporter quitter son mari. Cette constatation était trop évidente pour permettre la contradiction. Bien malgré lui, monsieur Woodhouse fut obligé de se soumettre en soutirant. Monsieur Woodhouse demeura un moment silencieux, puis ajouta: mais je ne vois pas pourquoi la pauvre Isabelle serait obligée de rentrer si tôt, à cause de son mari. Il faut que je l'aperçoive de prolonger son séjour. Elle pourrait parfaitement rester avec les enfants.",
+   "vae_acoustic": 7180.6,
+   "vae_semantic": 5666.2,
+   "prompt_build": 2.8,
+   "prefill": 4212.6,
+   "decode": 10686.0
+  },
+  {
+   "engine": "upstream runtime",
+   "error": "rc=-6"
+  },
+  {
+   "engine": "whisper small q5_1",
+   "compute_ms": 23115.440000000002,
+   "wall_s": 23.63988947868347,
+   "rtf": 0.30415052631578954,
+   "wer": 27.570093457943926,
+   "speakers": false,
+   "hyp": "Pour une fois dans votre vie, vous serez forcés de reconnaître que vous vous êtes trompés. La situation est évidemment sur le point de se dénouer. Elle fait forcer d'interrompre ses agréables réflexions pour donner quelques éclaircissements à Ariette. j'espère qu'il en est ainsi cette fois encore mais autrement je n'aurais jamais pu imaginer monsieur Elton qui pouvait prétendre à la plus brillante des alliances quand je pense assez vers charmant ah papa c'est ce que vous n'avez jamais pu obtenir et vous n'aurez pas plus de succès cette fois-ci Isabelle ne peut supporter quitter son mari cette constatation était trop évidente pour permettre la contradiction bien malgré lui monsieur Woodhouse fut obligé de se soumettre Monsieur Woodhouse demeurera un moment silencieux puis ajouta mais je ne vois pas pourquoi la pauvre Isabelle serait obligé de rentrer si tôt à cause de son mari il faut que je la perçoit de prolonger son séjour elle pourrait parfaitement rester avec les enfants"
+  },
+  {
+   "engine": "whisper large-v3-turbo q5",
+   "compute_ms": 75565.42000000001,
+   "wall_s": 76.86979794502258,
+   "rtf": 0.9942818421052634,
+   "wer": 5.607476635514018,
+   "speakers": false,
+   "hyp": "Pour une fois dans votre vie, vous serez forcée de reconnaître que vous vous êtes trompée. La situation est évidemment sur le point de se dénouer. » Elle fut forcée d'interrompre ses agréables réflexions pour donner quelques éclaircissements à Harriet. « Oui, papa, en effet, elle est écrite à la seconde page de notre cahier. Nous l'avons copiée dans les morceaux choisis. Elle est de Garrick. » Je me rappelle seulement qu'elle commençait par Kitty. « Vous avez toujours raison. Je suppose, je crois, j'espère qu'il en est ainsi cette fois encore. Mais autrement, je n'aurais jamais pu imaginer. Monsieur Elton qui pouvait prétendre à la plus brillante des alliances, quand je pense à ces vers charmants. Ah, papa, c'est ce que vous n'avez jamais pu obtenir. Et vous n'aurez pas plus de succès cette fois-ci. Isabelle ne peut supporter quitter son mari. » Cette constatation était trop évidente pour permettre la contradiction. Bien malgré lui, il ne peut pas être en soupirant. Monsieur Woodhouse demeura un moment silencieux, puis ajouta. « Mais je ne vois pas pourquoi la pauvre Isabelle serait obligée de rentrer si tôt à cause de son mari. Il faut que je la persuade de prolonger son séjour. Elle pourrait parfaitement rester avec les enfants. »"
+  }
+ ]
+}
