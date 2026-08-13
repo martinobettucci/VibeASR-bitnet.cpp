@@ -74,22 +74,28 @@ difficulty, not quantisation damage.
 back-to-back on one host at 4 threads, later runtime build, whisper given each
 clip's language code (generous: this model runs unhinted):
 
-| Engine / weights | de | en | es | fr | fr-MLS | it | pt | **all** |
-|:--|--:|--:|--:|--:|--:|--:|--:|--:|
-| Upstream engine, original 1.70 GB | 16.7 | 6.6 | 5.8 | 32.7 | 21.6 | 8.3 | 10.8 | **15.75** |
-| **This repo (slim), fork engine** | 13.9 | 7.2 | 5.8 | 35.4 | 21.2 | 10.2 | 10.5 | **16.03** |
-| This repo, fork engine + residual fusion (default) | 15.6 | 6.6 | 7.1 | 33.6 | 21.9 | 8.6 | 11.1 | **16.07** |
-| whisper.cpp small q5_1 | 8.5 | 4.6 | 7.1 | 12.9 | 16.7 | 6.6 | 8.0 | **9.92** |
-| whisper.cpp large-v3-turbo q5_0 | 4.1 | 3.7 | 4.0 | 3.3 | 10.3 | 3.3 | 4.3 | **5.12** |
+Speed is given as a ratio over the upstream runtime (absolute RTF is a property
+of the benchmark host, not of the model); > 1 is faster than upstream.
 
-Read it straight: slim-vs-original is again parity (+0.28, per-language scatter in
-both directions — German improves under the fork's overflow-fixed kernels, Italian
-regresses), while whisper models beat this architecture on accuracy at this corpus
-register. What this stack offers instead is speed shape and features: compute
-proportional to clip length where whisper always encodes a fixed 30 s window (this
-engine is 1.76× *faster* than whisper-small below 8 s of audio and 3.9× faster
-than turbo overall), native segment/speaker JSON, and decoder-level hotword
-biasing. Speed ratios and their methodology live in the
+| Engine / weights | de | en | es | fr | fr-MLS | it | pt | **all** | **speed** |
+|:--|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| Upstream engine, original 1.70 GB | 16.7 | 6.6 | 5.8 | 32.7 | 21.6 | 8.3 | 10.8 | **15.75** | 1.00× |
+| **This repo (slim) + fork engine, defaults** | 15.6 | 6.6 | 7.1 | 33.6 | 21.9 | 8.6 | 11.1 | **16.07** | **2.35×** |
+| This repo, fork engine bit-exact mode | 13.9 | 7.2 | 5.8 | 35.4 | 21.2 | 10.2 | 10.5 | **16.03** | **2.01×** |
+| whisper.cpp small q5_1 | 8.5 | 4.6 | 7.1 | 12.9 | 16.7 | 6.6 | 8.0 | **9.92** | **3.06×** |
+| whisper.cpp large-v3-turbo q5_0 | 4.1 | 3.7 | 4.0 | 3.3 | 10.3 | 3.3 | 4.3 | **5.12** | **0.75×** |
+
+Read it straight. Slim-vs-original is parity (+0.32, per-language scatter both
+ways — German improves under the fork's overflow-fixed kernels, Spanish
+regresses). But **on this corpus whisper-small is both more accurate and ~1.3×
+faster** than this model, and turbo is far more accurate again. These clips are
+5–25 s, which is whisper's ideal case and this architecture's worst: it never
+exercises what VibeVoice-ASR is built for — single-pass long-form (an hour of
+audio is one encode, not ~120 stitched 30 s windows), native speaker/segment
+JSON, and decoder-level hotword biasing. Choose accordingly: for short-clip
+transcription accuracy, use whisper; for long recordings needing speakers,
+timestamps and domain-term biasing in one CPU pass, this is the cheaper stack.
+Speed methodology and reproduction scripts live in the
 [runtime repo](https://github.com/martinobettucci/VibeASR-bitnet.cpp/tree/claude/asr-cpu-optimization-cztnh9)
 and are not duplicated here.
 

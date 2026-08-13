@@ -8,10 +8,10 @@
         --engine bench/results/fin_whisper_turbo.json="whisper.cpp large-v3-turbo q5" \
         --engine bench/results/fin_whisper_small.json="whisper.cpp small q5"
 
-Speed is expressed OVER THE BASELINE (upstream original code): paired per-clip
-median of baseline_compute / engine_compute, so >1 means faster than the original
-runtime. All rows come from one sequential session on one host, which is what
-makes the ratios transferable when the absolute numbers are not.
+Speed is expressed OVER THE BASELINE (upstream original code). With --speed, the
+ratios come from an interleaved run (all engines per clip) rather than from the
+WER runs, because cross-phase timing on a shared host is not trustworthy.
+
 """
 
 import argparse
@@ -51,7 +51,22 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--baseline", required=True)
     ap.add_argument("--engine", action="append", default=[])
+    ap.add_argument("--speed", default=None,
+                    help="interleaved raw JSON (list of {lang,<engine>:ms}); speed "
+                         "ratios come from there instead of from the WER runs")
+    ap.add_argument("--speed-key", action="append", default=[],
+                    help="table-label=interleaved-key, repeatable")
     args = ap.parse_args()
+
+    # Speed from a separate interleaved run. Ratios taken ACROSS PHASES of a
+    # sequential sweep are not trustworthy on shared hosts -- measured drift
+    # between phases was large enough to invert a known 1.15x ratio -- so the
+    # published speed column comes from a run where every engine measures each
+    # clip back to back. WER stays on the big sweeps: it is deterministic per
+    # engine and immune to host noise.
+    speed_rows = json.load(open(args.speed)) if args.speed else None
+    # rsplit: table labels themselves contain '=' (e.g. "VIBEASR_RES_FUSE=0")
+    skey = dict(s.rsplit("=", 1) for s in args.speed_key)
 
     blabel, base = load(args.baseline)
     bkey = {(r["lang"], r["wav"]): r for r in base}
@@ -68,6 +83,14 @@ def main():
         cells = " | ".join("%.1f" % w[l] if l in w else "-" for l in langs)
         if is_base:
             speed = "1.00× (baseline)"
+        elif speed_rows is not None:
+            k = skey.get(label) or skey.get(label.replace("**", ""))
+            bk = skey.get(blabel) or skey.get(blabel.replace("**", ""))
+            if not k or not bk:
+                speed = "—"
+            else:
+                ratios = [r[bk] / r[k] for r in speed_rows if r.get(k) and r.get(bk)]
+                speed = "**%.2f×** (n=%d)" % (median(ratios), len(ratios))
         else:
             pairs = [(bkey[(r["lang"], r["wav"])], r) for r in recs
                      if (r["lang"], r["wav"]) in bkey]

@@ -102,38 +102,70 @@ and are not duplicated here.
 ### Result: 2.56× the upstream engine, measured as a ratio
 
 Absolute RTF numbers are a property of whatever VM a benchmark lands on — this
-project measured the same binary drifting ±18% between sessions as its cloud host
-migrated. So the headline is a **ratio**: engines run back-to-back on one host,
-same 100 clips (seven language/register sets, 21.8 min of audio), same 4 threads,
-compute only (model load excluded), paired per clip:
+project measured the same binary drifting ±18% between sessions, and over 30%
+*within* one session as its cloud host degraded. So everything is published as a
+**ratio against the upstream runtime**, which is the number that transfers.
 
-| Engine | Weights | Speed vs this fork | WER |
-|:--|:--|--:|:--|
-| **This fork** | slim 1.23 GB | 1.00× | baseline |
-| Upstream microsoft/VibeASR.cpp | original 1.70 GB | **2.56× slower** | ≈ parity (+0.28) |
-| whisper.cpp large-v3-turbo q5_0 | 1.6 GB → 574 MB q5 | 3.94× slower | much better |
-| whisper.cpp small q5_1 | 190 MB q5 | 1.07× (parity) | better |
+Baseline = upstream microsoft/VibeASR.cpp with the original 1.70 GB weights.
+Speed > 1 means faster than that baseline. 4 threads, compute only (model load
+excluded).
 
-After this table was measured, the residual-fusion default (below) added a further
-**1.17× paired** at +0.04 WER; chained, that puts the fork at **≈3.0× the upstream
-engine** and ~1.25× faster than whisper-small overall.
+| Engine | de | en | es | fr | fr-MLS | it | pt | **WER all** | **speed × over baseline** |
+|:--|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| Upstream Microsoft runtime, original 1.70 GB weights | 16.7 | 6.6 | 5.8 | 32.7 | 21.6 | 8.3 | 10.8 | **15.75** | 1.00× (baseline) |
+| **This fork** (all optimisations, default) | 15.6 | 6.6 | 7.1 | 33.6 | 21.9 | 8.6 | 11.1 | **16.07** | **2.35×** |
+| This fork, bit-exact mode (`VIBEASR_RES_FUSE=0`) | 13.9 | 7.2 | 5.8 | 35.4 | 21.2 | 10.2 | 10.5 | **16.03** | **2.01×** |
+| whisper.cpp small q5_1 | 8.5 | 4.6 | 7.1 | 12.9 | 16.7 | 6.6 | 8.0 | **9.92** | **3.06×** |
+| whisper.cpp large-v3-turbo q5_0 | 4.1 | 3.7 | 4.0 | 3.3 | 10.3 | 3.3 | 4.3 | **5.12** | **0.75×** |
 
-WER columns are summarised deliberately — per-language accuracy tables live on the
-[model card](https://huggingface.co/P2Enjoy/VibeVoice-ASR-BitNet-slim), which is
-the accuracy authority for these weights. Two honest notes in both directions:
-the fork's 2.56× is an engine-vs-engine claim on identical model architecture and
-holds flat across clip lengths (2.2–2.7×); and on this FLEURS-register corpus
-whisper-small matches our speed at better accuracy — the places this stack wins
-structurally are **short clips** (whisper always encodes a fixed 30 s window:
-under 8 s of audio whisper-small is 1.76× slower, and the gap widens as clips
-shorten), **native segment/speaker JSON output**, and **decoder-level hotword
-biasing**. Whisper was given each clip's language code (generous — our model runs
-unhinted). Reproduce with `bench/speed_test.py`, `bench/whisper_bench.py`,
-`bench/relative_report.py`.
+**Methodology, because the two columns come from different runs on purpose.**
+WER is from full 100-clip runs per engine (deterministic per engine — host noise
+cannot touch it). Speed is from a separate *interleaved* run (`n=12` clips
+spanning all seven sets) where every engine transcribes each clip back to back,
+so both halves of every ratio share one noise window. Sequential
+phase-per-engine timing was tried first and rejected: drift between phases was
+large enough to invert a ratio known to be 1.15×. Whisper received each clip's
+language code; this model ran unhinted. Reproduce with `bench/speed_test.py`,
+`bench/whisper_bench.py`, `bench/interleaved_speed.py`, `bench/final_table.py`.
 
-At the measured throughput a stream holds real-time on ~2 of these vCPUs, so a
-32-core server carries roughly 16 concurrent streams — the deployment shape that
-replaces an ASR GPU.
+**Reading it honestly.** The engine claim is clean: **2.35× the upstream runtime
+at unchanged accuracy** (+0.32 WER, and the per-language deltas scatter both ways
+— German improves 1.1 points under the overflow-fixed kernels, Spanish loses
+1.3). The model claim is not: on this corpus **whisper-small is both more
+accurate and ~1.3× faster than this fork**, and turbo is far more accurate still.
+An earlier sequential measurement here reported whisper-small at parity; the
+interleaved run corrects that in whisper's favour.
+
+What this stack offers is not short-clip WER — see the next section.
+
+### What the optimised runtime actually buys
+
+The table above is measured on 5–25 second clips — whisper's home turf and this
+architecture's worst case. It says nothing about what VibeVoice-ASR is *for*, so
+here is the case stated plainly.
+
+The architecture's advantages were always structural, and always the same three:
+
+- **Single-pass long-form.** 3200× audio compression into an LLM context means an
+  hour of audio is *one* encode and one prefill. whisper.cpp processes a fixed
+  30 s window at a time — an hour is ~120 windows, with state carried across
+  seams, boundary artefacts, and VAD/stitching glue around it.
+- **Speakers and timestamps natively.** Segment boundaries and speaker labels come
+  out of the same decoding pass, as JSON. Whisper emits none of that; diarization
+  means bolting on a second system that often costs more than the ASR.
+- **An LLM decoder.** Context conditioning, output formatting, and decoder-level
+  hotword biasing (`--hotwords`, +4 WER points recovered on French) are natural
+  operations on a Qwen — not bolt-ons.
+
+What they were *not*, before this fork, is usable on a CPU. At upstream's speed
+those properties were academic: you cannot hold a live stream below real time,
+and for batch work people just used a GPU. **That is what the optimisation bought
+— it made the architecture's advantages affordable.** Transcription plus speakers
+plus timestamps plus biasing plus single-pass long-form, now in the same compute
+envelope as bare whisper-small transcription.
+
+The benchmark that would show this properly is long-form, not clip-level; it is
+the next thing on the list, and this section will carry its numbers when it lands.
 
 ### Where the time went, measured
 

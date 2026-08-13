@@ -1,0 +1,98 @@
+[
+ {
+  "lang": "en_us",
+  "fork": 5867,
+  "exact": 7571,
+  "upstream": 14284,
+  "turbo": 27586,
+  "small": 6018
+ },
+ {
+  "lang": "fr_fr",
+  "fork": 4818,
+  "exact": 5983,
+  "upstream": 10573,
+  "turbo": 25022,
+  "small": 6223
+ },
+ {
+  "lang": "it_it",
+  "fork": 6645,
+  "exact": 7671,
+  "upstream": 19789,
+  "turbo": 27284,
+  "small": 6595
+ },
+ {
+  "lang": "pt_br",
+  "fork": 8435,
+  "exact": 7920,
+  "upstream": 18890,
+  "turbo": 26067,
+  "small": 6046
+ },
+ {
+  "lang": "es_419",
+  "fork": 8352,
+  "exact": 13545,
+  "upstream": 20836,
+  "turbo": 26944,
+  "small": 7085
+ },
+ {
+  "lang": "de_de",
+  "fork": 37195,
+  "exact": 10945,
+  "upstream": 23060,
+  "turbo": 27285,
+  "small": 7251
+ },
+ {
+  "lang": "fr_mls",
+  "fork": 24428,
+  "exact": 19599,
+  "upstream": 34614,
+  "turbo": 29820,
+  "small": 8789
+ },
+ {
+  "lang": "en_us",
+  "fork": 8682,
+  "exact": 13123,
+  "upstream": 25228,
+  "turbo": 27917,
+  "small": 6276
+ },
+ {
+  "lang": "fr_fr",
+  "fork": 6037,
+  "exact": 6057,
+  "upstream": 13233,
+  "turbo": 26621,
+  "small": 7052
+ },
+ {
+  "lang": "it_it",
+  "fork": 14409,
+  "exact": 10636,
+  "upstream": 38501,
+  "turbo": 26925,
+  "small": 7379
+ },
+ {
+  "lang": "pt_br",
+  "fork": 7475,
+  "exact": 7735,
+  "upstream": 16888,
+  "turbo": 25483,
+  "small": 5815
+ },
+ {
+  "lang": "es_419",
+  "fork": 9230,
+  "exact": 65194,
+  "upstream": 45077,
+  "turbo": 26875,
+  "small": 7245
+ }
+]
