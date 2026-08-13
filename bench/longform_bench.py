@@ -109,6 +109,10 @@ def main():
           % (os.path.basename(args.wav), dur, meta["n_speakers"], meta["n_turns"]))
 
     engines = [
+        # Both output modes, because they are not equivalent: asking this model for
+        # structured segments measurably damages the transcription (see results).
+        ("this fork (plain text)", lambda: run_vibe(args.bin, args.vae, args.lm,
+                                                    args.wav, args.threads, False, args.timeout)),
         ("this fork (JSON segments)", lambda: run_vibe(args.bin, args.vae, args.lm,
                                                        args.wav, args.threads, True, args.timeout)),
         ("upstream runtime", lambda: run_vibe(args.upstream_bin, args.vae, args.upstream_lm,
