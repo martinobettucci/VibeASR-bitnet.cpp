@@ -88,16 +88,25 @@ of the benchmark host, not of the model); > 1 is faster than upstream.
 Read it straight. Slim-vs-original is parity (+0.32, per-language scatter both
 ways — German improves under the fork's overflow-fixed kernels, Spanish
 regresses). But **on this corpus whisper-small is both more accurate and ~1.3×
-faster** than this model, and turbo is far more accurate again. These clips are
-5–25 s, which is whisper's ideal case and this architecture's worst: it never
-exercises what VibeVoice-ASR is built for — single-pass long-form (an hour of
-audio is one encode, not ~120 stitched 30 s windows), native speaker/segment
-JSON, and decoder-level hotword biasing. Choose accordingly: for short-clip
-transcription accuracy, use whisper; for long recordings needing speakers,
-timestamps and domain-term biasing in one CPU pass, this is the cheaper stack.
-Speed methodology and reproduction scripts live in the
+faster** than this model, and turbo is far more accurate again.
+
+The obvious rebuttal is that 5–25 s clips are whisper's ideal case and this
+architecture's worst — it never exercises single-pass long-form or the
+speaker/segment output the runtime can request. **That rebuttal was tested and it
+failed.** On a 100 s two-speaker recording (full table in the runtime repo): the
+model transcribes correctly from the first word, then **stops early — 140 of 266
+reference words**, end token emitted with the token budget 98% unused; it emits
+**no speaker labels** despite the JSON format existing; and asking for that JSON
+makes the transcription worse (WER 55.7 vs 51.1). whisper-large-v3-turbo gets all
+288 words at WER 8.6 on the same file.
+
+Honest guidance: **choose whisper for transcription accuracy at any clip length.**
+Choose this stack if you specifically need a 1.2 GB ternary CPU model with
+decoder-level hotword biasing (measured: FLEURS-French 36.0 → 31.9 with domain
+terms), or you are working on the architecture itself. The runtime around it is
+fast, deterministic and portable — that part holds up; see the
 [runtime repo](https://github.com/martinobettucci/VibeASR-bitnet.cpp/tree/claude/asr-cpu-optimization-cztnh9)
-and are not duplicated here.
+for methodology and reproduction scripts.
 
 The runtime also ships opt-in decoder-level hotword biasing (`--hotwords`,
 token-trie logit boosting): on FLEURS-French with oracle terms it recovers ~4 WER

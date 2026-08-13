@@ -5,18 +5,32 @@
  "n_turns": 3,
  "rows": [
   {
+   "engine": "this fork (plain text)",
+   "compute_ms": 36434.200000000004,
+   "wall_s": 41.445788860321045,
+   "rtf": 0.37204329623200244,
+   "wer": 51.07142857142857,
+   "speakers": false,
+   "hyp": "Pour une fois dans votre vie, vous serez forcé de reconnaître que vous vous êtes trompé. La situation est évidemment sur le point de se dénouer.\nElle fait forcer d'interrompre ses agréables réflexions pour donner quelques éclaircissements à Harriet.\nOui, papa, en effet, elle est écrite à la seconde page de notre cahier. Nous l'avons copiée dans les morceaux choisis. Elle est de garique.\nJe me rappelle seulement qu'elle commençait par Kitty.\nPendant le second siècle, je fis serment d'ouvrir tous les trésors de la terre à quiconque me mettrait en liberté. Mais je ne fût pas plus heureux. Dans le troisième, je promis de faire puissant mon arc, mon libérateur, d'être toujours près de lui en esprit. Non, ta mort est certaine, dit le génie, choisis seulement de quelle sorte tu veux que je te fasse mourir. Le pêcheur",
+   "vae_acoustic": 15466.7,
+   "vae_semantic": 8291.6,
+   "prompt_build": 1.1,
+   "prefill": 5215.5,
+   "decode": 7459.3
+  },
+  {
    "engine": "this fork (JSON segments)",
-   "compute_ms": 36310.899999999994,
-   "wall_s": 44.08924865722656,
-   "rtf": 0.3707842336362707,
+   "compute_ms": 30728.6,
+   "wall_s": 33.79909896850586,
+   "rtf": 0.31378127233738384,
    "wer": 55.714285714285715,
    "speakers": false,
    "hyp": "Oui papa, en effet, elle est écrite à la seconde page de notre cahier. Nous l'avons copiée dans les morceaux choisis. Elle est de garique. Je me rappelle seulement qu'elle commençait par Kitty.\nPendant un second siècle, je fis certainement d'ouvrir tous les trésors de la Terre à Key Content me mettrait en liberté. Mais je ne fus pas plus heureux. Dans le troisième, je promis de faire puissant mon arc, mon libérateur, d'être toujours près de lui en esprit. Non, ta mort est certaine, dit le génie: choisissez seulement de quelle sorte tu veux que je te fasse mourir. Le pêcheur le voyant dans les résolutions de Lietzui ennuie une douleur extrême, n'empattant pour l'amour de lui qu'à cause de ses trois enfants dont il clignait la misère où il allait être réduit par sa mort.",
-   "vae_acoustic": 16333.8,
-   "vae_semantic": 7584.4,
+   "vae_acoustic": 10086.8,
+   "vae_semantic": 8269.4,
    "prompt_build": 1.2,
-   "prefill": 5127.9,
-   "decode": 7263.6
+   "prefill": 5251.3,
+   "decode": 7119.9
   },
   {
    "engine": "upstream runtime",
@@ -24,18 +38,18 @@
   },
   {
    "engine": "whisper small q5_1",
-   "compute_ms": 26972.159999999996,
-   "wall_s": 42.16194534301758,
-   "rtf": 0.2754228530583069,
+   "compute_ms": 27183.84,
+   "wall_s": 27.624523162841797,
+   "rtf": 0.27758439701827836,
    "wer": 37.5,
    "speakers": false,
    "hyp": "Pour une fois dans votre vie, vous serez forcés de reconnaître que vous vous êtes trompés. La situation est évidemment sur le point de se dénouer. Elle fait forcer d'interrompre ses agréables réflexions pour donner quelques éclaircissements à Hariette. Oui papa, en effet, elle est écrite à la seconde page de notre cahier. Nous l'avons copié dans les morceaux choisis. Elle est de Garrick. Je me rappelle seulement qu'elle commençait par Kitty. No. Ta mort est certaine, dit de génie. Choisis seulement de quelle sorte tu veux que je te fasse mourir. Où ils allaient être riduits par sa mort. Vous avez toujours raison. Je suppose, je crois. J'espère qu'il en est ainsi cette fois encore. Mais autrement, je n'aurais jamais pu imaginer. M. Elton qui pouvait prétendre à la plus brillante des alliances. Quand je pense à ces verres charmants. Ah, papa, c'est ce que vous n'avez jamais pu obtenir. Et vous n'aurez pas plus de succès cette fois-ci. Isabelle ne peut supporter Kitty son mari. Bien malgré lui, M. Woodhouse fut obligé de se soumettre en sous-pirant."
   },
   {
    "engine": "whisper large-v3-turbo q5",
-   "compute_ms": 98703.6,
-   "wall_s": 139.3190462589264,
-   "rtf": 1.0078995200653529,
+   "compute_ms": 98434.51,
+   "wall_s": 99.6180419921875,
+   "rtf": 1.0051517410395179,
    "wer": 8.571428571428571,
    "speakers": false,
    "hyp": "Pour une fois dans votre vie, vous serez forcée de reconnaître que vous vous êtes trompée. La situation est évidemment sur le point de se dénouer. » Elle fut forcée d'interrompre ses agréables réflexions pour donner quelques éclaircissements à Harriet. « Oui, papa, en effet, elle est écrite à la seconde page de notre cahier. Nous l'avons copiée dans les morceaux choisis. Elle est de Garrick. Je me rappelle seulement qu'elle commençait par Kitty. » « Qui serment d'ouvrir tous les trésors de la terre à quiconque me mettrait en liberté ? Mais je ne fus pas plus heureux. » Dans le troisième, je promis de faire puissant monarque mon libérateur, d'être toujours près de lui en esprit. « Non, ta mort est certaine, » dit le génie. « Choisis seulement de quelle sorte tu veux que je te fasse mourir. » Le pêcheur, le voyant dans les résolutions de le tuer, en eut une douleur extrême, non pas tant pour l'amour de lui qu'à cause de ses trois enfants dont il plaignait la misère. « Vous avez toujours raison. » « Vous avez toujours raison. » « Je suppose, je crois. » « J'espère qu'il en est ainsi cette fois encore. » « Mais autrement, je n'aurais jamais pu imaginer. » « Monsieur Elton qui pouvait prétendre à la plus brillante des alliances. » « Quand je pense à ces vers charmants. » « Ah, papa, c'est ce que vous n'avez jamais pu obtenir. » « Et vous n'aurez pas plus de succès cette fois-ci. » Isabelle ne peut supporter quitter son mari. » « Les constatations étaient trop évidentes pour permettre la contradiction. » Bien malgré lui, M. Woodhouse fut obligé de se soumettre en soupirant."

@@ -136,36 +136,62 @@ accurate and ~1.3× faster than this fork**, and turbo is far more accurate stil
 An earlier sequential measurement here reported whisper-small at parity; the
 interleaved run corrects that in whisper's favour.
 
-What this stack offers is not short-clip WER — see the next section.
+The long-form section below tested whether the architecture's structural
+advantages make up for that. They do not — read it before choosing this stack.
 
-### What the optimised runtime actually buys
+### Long-form: the advantages this model was supposed to have, tested
 
-The table above is measured on 5–25 second clips — whisper's home turf and this
-architecture's worst case. It says nothing about what VibeVoice-ASR is *for*, so
-here is the case stated plainly.
+The clip table above runs 5–25 s utterances — whisper's ideal case (its encoder
+always processes a fixed 30 s window) and this architecture's worst. VibeVoice-ASR
+compresses audio 3200× into an LLM context specifically so that a long recording
+is *one* encode and one prefill, and `asr_infer` can ask for `{Start, End,
+Speaker, Content}` segments. Earlier revisions of this README asserted those as
+the fork's real value. **They were asserted, never measured. Measured, they do not
+hold.**
 
-The architecture's advantages were always structural, and always the same three:
+One 100 s two-speaker recording (`bench/make_longform.py`, MLS French utterances
+stitched with reference turn boundaries), every engine back to back on one host,
+4 threads (`bench/longform_bench.py`):
 
-- **Single-pass long-form.** 3200× audio compression into an LLM context means an
-  hour of audio is *one* encode and one prefill. whisper.cpp processes a fixed
-  30 s window at a time — an hour is ~120 windows, with state carried across
-  seams, boundary artefacts, and VAD/stitching glue around it.
-- **Speakers and timestamps natively.** Segment boundaries and speaker labels come
-  out of the same decoding pass, as JSON. Whisper emits none of that; diarization
-  means bolting on a second system that often costs more than the ASR.
-- **An LLM decoder.** Context conditioning, output formatting, and decoder-level
-  hotword biasing (`--hotwords`, +4 WER points recovered on French) are natural
-  operations on a Qwen — not bolt-ons.
+| Engine | compute | RTF | words emitted / 266 | WER | speaker labels |
+|:--|--:|--:|--:|--:|:--|
+| This fork, plain text | 36.4 s | 0.37 | 140 | 51.1 | no |
+| This fork, `--prompt-format json` | 30.7 s | 0.31 | 137 | 55.7 | **no** |
+| whisper.cpp small q5_1 | 27.2 s | 0.28 | 179 | 37.5 | no (none exists) |
+| whisper.cpp large-v3-turbo q5 | 98.4 s | 1.01 | 288 | 8.6 | no (none exists) |
 
-What they were *not*, before this fork, is usable on a CPU. At upstream's speed
-those properties were academic: you cannot hold a live stream below real time,
-and for batch work people just used a GPU. **That is what the optimisation bought
-— it made the architecture's advantages affordable.** Transcription plus speakers
-plus timestamps plus biasing plus single-pass long-form, now in the same compute
-envelope as bare whisper-small transcription.
+Three findings, none of them flattering:
 
-The benchmark that would show this properly is long-form, not clip-level; it is
-the next thing on the list, and this section will carry its numbers when it lands.
+1. **The model truncates long audio.** It transcribes correctly from the first
+   word and then simply stops — 140 of 266 reference words, ending mid-sentence,
+   with `--max-tokens` nowhere near reached (240 tokens decoded of 16384 allowed).
+   The decoder emits its end token early. Most of the 51.1 WER is that missing
+   half, not mistranscription. Single-pass long-form is not a working advantage;
+   it is a bug to fix.
+2. **Speaker labels are not produced.** The JSON flag exists and `asr_infer`
+   parses the format, but the model emits none. Whisper has no diarization either
+   — so this is a tie at zero, not an edge.
+3. **Asking for JSON makes it worse**, not better: 137 words and WER 55.7 versus
+   plain text's 140 and 51.1, on identical audio.
+
+What survives the test: **the fork runs 100 s in a single encode at RTF 0.37** —
+2.7× faster than whisper-large-v3-turbo (which is far more accurate) and 0.75× the
+speed of whisper-small (which is also more accurate here). And the upstream
+runtime cannot run this file at all: it aborts, because the arena bug fixed in
+this fork (see below) caps it well under 100 s.
+
+So the honest scope of this project is **the runtime, not the model**: 2.35×
+upstream at equal accuracy, deterministic, portable, with a memory bug fixed that
+gated long inputs entirely. The model's own selling points need work in the
+weights, not the kernels. The one decoder-level feature that *does* work is
+hotword biasing (measured: FLEURS-French 36.0 → 31.9), because it was built and
+verified here rather than inherited.
+
+**Memory, the other long-form wall.** A ggml context arena keeps every intermediate
+alive for the whole graph — no liveness analysis — so the encoder costs ~110 MB per
+second of audio (measured, `VIBEASR_ARENA_STATS=1`). On a 16 GB machine that caps a
+single pass near 135 s. Hour-long single-pass transcription needs the encoder moved
+to `ggml_gallocr`, which reuses buffers of dead tensors; this fork has not done it.
 
 ### Where the time went, measured
 
