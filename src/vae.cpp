@@ -889,20 +889,39 @@ static int32_t vae_encode_impl(
     const bool use_i8_s = (encoder.downsamples[0].conv_weight->type == GGML_TYPE_I8_S);
 
     // Create computation context with sufficient memory.
-    // Arena use is linear in the input length, and depends on the weight type:
-    // F32 models need more memory than I8_S due to 4x larger intermediate
-    // tensors. The I8_S rate is measured at ~8.9 KB per input sample (~214 MB
-    // per second of 24 kHz audio), constant across 8 s to 267 s inputs; the F32
-    // rate applies the 4x ratio above.
-    // A fixed reservation is wrong in both directions. 128 GB is refused
-    // outright by Windows (no overcommit) and by Linux heuristic overcommit on
-    // any host whose RAM + swap is smaller, aborting in ggml_aligned_malloc
-    // before any audio is processed. A small fixed pool starts everywhere but
-    // silently caps input length and then segfaults past it. Size the arena
-    // from the actual sample count instead, with ~15% headroom.
-    const size_t bytes_per_sample = use_i8_s ? 10240 : 40960;
+    //
+    // Arena use is linear in input length and depends on the weight type (F32
+    // intermediates are 4x I8_S). A fixed reservation is wrong in both
+    // directions: 128 GB is refused outright by Windows (no overcommit) and by
+    // Linux heuristic overcommit on any host with less RAM+swap, aborting in
+    // ggml_aligned_malloc before any audio is processed; a small fixed pool
+    // starts everywhere but silently caps input length and then segfaults past
+    // it. So it is sized from the sample count.
+    //
+    // The I8_S rate is MEASURED (VIBEASR_ARENA_STATS=1) and has TWO parts, which
+    // is what a first attempt at tightening this got wrong: 3076 B/sample of
+    // graph tensors PLUS 1024 B/sample of thread work buffer, because
+    // ggml_graph_compute_with_ctx allocates the work buffer as an object in this
+    // same context and sizes it from the largest node. Reserving for tensors
+    // alone builds the graph happily, then hands the kernels work_data = NULL --
+    // a segfault at address 0, several minutes into a long input.
+    //
+    // 4600 = the measured 4100 plus ~12% headroom. The previous 10240 was a 2.5x
+    // over-reservation dating from before the graph rewrites (packed-GEMM dropped
+    // the int32 accumulators; conv-as-GEMM removed the im2col expansions), and
+    // since this arena is what bounds maximum audio length, that slack cost real
+    // capability: it capped inputs near 60 s on a 16 GB machine where 135 s now
+    // fits.
+    //
+    // Even so this is ~110 MB per second of audio, because a ggml context arena
+    // keeps every intermediate alive for the whole graph -- there is no liveness
+    // analysis. THAT is the binding constraint on single-pass long-form, not
+    // compute: see bench/longform_bench.py. Lifting it means moving the encoder
+    // to ggml_gallocr (which reuses buffers whose tensors are dead), a change
+    // this fork has not made.
+    const size_t bytes_per_sample = use_i8_s ? 4600 : 18400;
     const size_t vae_ctx_mem_size =
-        (size_t)n_samples * bytes_per_sample + (size_t)512 * 1024 * 1024;
+        (size_t)n_samples * bytes_per_sample + (size_t)256 * 1024 * 1024;
     struct ggml_init_params ctx_params = {
         /*.mem_size   =*/ vae_ctx_mem_size,
         /*.mem_buffer =*/ nullptr,
@@ -961,6 +980,26 @@ static int32_t vae_encode_impl(
     size_t max_nodes = vae_model_max_nodes(ctx->model);
     struct ggml_cgraph* gf = ggml_new_graph_custom(ctx->compute_ctx, max_nodes, false);
     ggml_build_forward_expand(gf, result);
+
+    // VIBEASR_ARENA_STATS=1 reports what the graph actually took against what was
+    // reserved. The reservation is a per-sample heuristic (see above); this is how
+    // to re-derive it when the graph changes.
+    if (getenv("VIBEASR_ARENA_STATS")) {
+        // The work buffer comes out of this same arena (ggml_graph_compute_with_ctx
+        // allocates it as an object in the context) and is sized by the LARGEST
+        // node, so it scales with audio length too. Reserving for tensors alone
+        // builds the graph fine and then hands the kernels a NULL work_data --
+        // the "segfault at 0" that long inputs used to die on.
+        struct ggml_cplan plan = ggml_graph_plan(gf, ctx->n_threads, nullptr);
+        const double tot = (double) ggml_used_mem(ctx->compute_ctx) + (double) plan.work_size;
+        fprintf(stderr,
+                "[VAE] arena: tensors %.0f MB + work %.0f MB = %.0f MB of %.0f MB reserved"
+                " (%.0f B/sample total, %d nodes)\n",
+                ggml_used_mem(ctx->compute_ctx) / 1048576.0,
+                plan.work_size / 1048576.0, tot / 1048576.0,
+                vae_ctx_mem_size / 1048576.0,
+                tot / (double) n_samples, ggml_graph_n_nodes(gf));
+    }
     
     // Compute
     if (ggml_graph_compute_with_ctx(ctx->compute_ctx, gf, ctx->n_threads) != GGML_STATUS_SUCCESS) {
