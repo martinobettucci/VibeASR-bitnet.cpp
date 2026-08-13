@@ -74,7 +74,8 @@ VNNI) cloud VM**, 4 threads, compute only (model load excluded).
 |:--|--:|--:|--:|
 | 14 short clips, 7 languages (`bench/shortlong_bench.py`) | **3.15×** | 3.58× | 1.08× |
 | 100-clip suite, 7 languages (`bench/interleaved_speed.py`) | **2.35×** | 3.06× | 0.75× |
-| Real 7.7-min TED talk (`bench/lf_eval.py`) | **3.60×** | 4.15× | 1.48× |
+| Real TED talk, 7.7 min (`bench/lf_eval.py`) | **3.60×** | 4.15× | 1.48× |
+| Real TED talk, 13.9 min | **3.87×** | 4.17× | 1.48× |
 
 Upstream = 1.00× in every row. The three suites disagree by ~1.2× on absolute
 ratio and agree completely on ordering, which is the level of precision a shared
@@ -84,8 +85,9 @@ cloud host supports.
 
 Short clips, 7 languages: **8.73 WER vs upstream's 8.41** — and the only
 numerics-changing optimisation (residual fusion) accounts for it; `VIBEASR_RES_FUSE=0`
-is bit-exact with upstream. Real long-form (7.7-min TED talk): **5.67 vs 5.61**.
-Per-language model accuracy belongs on the model card.
+is bit-exact with upstream. Real long-form TED talks: **5.67 vs 5.61** (7.7 min) and
+**4.70 vs 5.38** (13.9 min) — i.e. within noise of upstream in both directions at
+roughly 3.7× its speed. Per-language model accuracy belongs on the model card.
 
 ### Measurement methodology
 

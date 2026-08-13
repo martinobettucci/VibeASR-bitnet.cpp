@@ -76,19 +76,24 @@ this card is actually about):
 (The absolute level differs from the table above because that one uses a
 14-item two-regime suite; both compare engines measured in the same session.)
 
-### Long-form (real recordings, 7.7-minute TED talk)
+### Long-form (real TED talks, whole recordings)
 
-| Engine | mode | WER |
-|:--|:--|--:|
-| whisper.cpp small q5_1 | native | 5.10 |
-| **this repo** | 60 s chunks | **5.67** |
-| microsoft original weights | 60 s chunks | 5.61 |
-| whisper.cpp large-v3-turbo q5_0 | native | 29.00 |
+| Engine | mode | 7.7 min | 13.9 min |
+|:--|:--|--:|--:|
+| whisper.cpp small q5_1 | native | **5.10** | 4.78 |
+| **this repo** | 60 s chunks | 5.67 | **4.70** |
+| microsoft original weights | 60 s chunks | 5.61 | 5.38 |
+| whisper.cpp large-v3-turbo q5_0 | native | 29.00 | 39.69 |
 
-On genuine long-form this model is **level with whisper-small**, and whisper-turbo
-collapses into a repetition loop under whisper.cpp's default flags. This is
-measured on real continuous speech (distil-whisper/tedlium-long-form), not on
-concatenated short clips.
+On genuine long-form this model is **level with whisper-small** — each wins one
+talk — and roughly 5 WER against a 2.4 on short clips, so the gap to whisper
+closes substantially as recordings get longer. whisper-turbo collapses into a
+repetition loop on both talks under whisper.cpp's default flags (its reference
+implementation has temperature-fallback logic that suppresses this).
+
+Measured on real continuous speech (`distil-whisper/tedlium-long-form`), not on
+concatenated short clips — splicing independent utterances produces speaker jumps
+that break every engine and measure nothing.
 
 ## Limits you must design around
 
