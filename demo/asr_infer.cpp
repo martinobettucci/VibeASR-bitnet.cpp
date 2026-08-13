@@ -88,7 +88,7 @@ static void print_usage(const char * prog) {
     fprintf(stderr, "  --sample-rate <n>    Target sample rate (default: 24000)\n");
     fprintf(stderr, "  --compress-ratio <n> Speech compression ratio (default: 3200)\n");
     fprintf(stderr, "  --context <text>     Hotwords/context info to improve recognition accuracy\n");
-    fprintf(stderr, "  --prompt-format <s>  Prompt format: 'text' (plain text) or 'json' (with keys) (default: text)\n");
+    fprintf(stderr, "  --prompt-format <s>  'text' (default). 'json' targets 7B weights and is rejected for 1.5B\n");
     fprintf(stderr, "  --no-normalize       Disable audio normalization\n");
     fprintf(stderr, "\nExample:\n");
     fprintf(stderr, "  %s --vae-model models/vibeasr-vae-encoder-i8_s.gguf \\\n", prog);
@@ -132,6 +132,26 @@ static bool parse_args(int argc, char ** argv, asr_params & params) {
             params.hotword_boost = std::stof(argv[++i]);
         } else if (arg == "--prompt-format" && i + 1 < argc) {
             params.prompt_format = argv[++i];
+            // The Start/End/Speaker/Content prompt targets the 7B checkpoint (see
+            // utils/prompt_builder.h). The released 1.5B weights were distilled for
+            // plain text: asked for JSON they emit no speaker turns and lose ~1.4
+            // WER (measured, 76 s continuous speech: 10.28 vs 8.88). Refusing beats
+            // silently returning degraded output that looks like a model failure.
+            if (params.prompt_format == "json") {
+                fprintf(stderr,
+                    "Error: --prompt-format json is not supported by the 1.5B weights.\n"
+                    "  The JSON segment format (Start/End/Speaker/Content) targets the 7B\n"
+                    "  checkpoint. This model emits no speaker labels and transcribes worse\n"
+                    "  when asked for it (measured +1.4 WER). Use --prompt-format text.\n"
+                    "  Override with VIBEASR_ALLOW_JSON=1 if you are running 7B weights.\n");
+                if (!getenv("VIBEASR_ALLOW_JSON")) {
+                    return false;
+                }
+                fprintf(stderr, "  VIBEASR_ALLOW_JSON=1 set - continuing anyway.\n");
+            } else if (params.prompt_format != "text") {
+                fprintf(stderr, "Error: --prompt-format must be 'text' or 'json'\n");
+                return false;
+            }
         } else if (arg == "--no-normalize") {
             params.normalize = false;
         } else if (arg == "-h" || arg == "--help") {
