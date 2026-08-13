@@ -27,6 +27,21 @@ import numpy as np
 import soundfile as sf
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def read_pcm16(path):
+    """Read any WAV subtype as int16 PCM.
+
+    fetch_fleurs writes 32-bit FLOAT wavs (samples in [-1, 1]); fetch_mls writes
+    PCM_16. Reading a float file with dtype='int16' truncates every sample to 0
+    or +-1 -- silence that transcribes as "you" and scores 100 WER on every
+    engine at once, which is what a broken harness looks like. Read as float and
+    scale explicitly instead.
+    """
+    data, sr = sf.read(path, dtype="float32", always_2d=False)
+    if data.ndim > 1:
+        data = data[:, 0]
+    return (np.clip(data, -1.0, 1.0) * 32767.0).astype(np.int16), sr
 LANGS = ["en_us", "fr_fr", "it_it", "pt_br", "es_419", "de_de", "fr_mls"]
 LONG_TARGET = 35.0
 
@@ -44,7 +59,7 @@ def main():
         # short: longest clip still under 30 s
         cand = [r for r in refs if r["duration"] < 30.0]
         short = max(cand, key=lambda r: r["duration"])
-        pcm, sr = sf.read(os.path.join(d, short["wav"]), dtype="int16")
+        pcm, sr = read_pcm16(os.path.join(d, short["wav"]))
         name = "%s_short" % lang
         sf.write(os.path.join(out, name + ".wav"), pcm, sr, subtype="PCM_16")
         index.append({"name": name, "lang": lang, "regime": "short",
@@ -56,7 +71,7 @@ def main():
         for r in refs:
             if dur >= LONG_TARGET:
                 break
-            p, s2 = sf.read(os.path.join(d, r["wav"]), dtype="int16")
+            p, s2 = read_pcm16(os.path.join(d, r["wav"]))
             assert s2 == sr
             chunks.append(p)
             texts.append(r["text"])
